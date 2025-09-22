@@ -42,7 +42,7 @@ export default function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormPr
 
         <div className="mb-4">
           <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="usernameOrEmail">
-            Nom d'utilisateur ou Email
+            Nom d&apos;utilisateur ou Email
           </label>
           <input
             id="usernameOrEmail"
@@ -85,7 +85,7 @@ export default function LoginForm({ onSuccess, onSwitchToRegister }: LoginFormPr
               onClick={onSwitchToRegister}
               className="text-blue-500 hover:text-blue-700 text-sm"
             >
-              Pas de compte ? S'inscrire
+              Pas de compte ? S&apos;inscrire
             </button>
           </div>
         )}

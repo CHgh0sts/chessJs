@@ -26,7 +26,7 @@ export default function ChessBoard({ fen, playerColor, currentPlayer, onMove, di
   const [possibleMoves, setPossibleMoves] = useState<string[]>([]);
   const [lastMove, setLastMove] = useState<string[]>([]);
 
-  const convertPieceNotation = (chessPiece: any) => {
+  const convertPieceNotation = (chessPiece: { type: string; color: string } | null) => {
     if (!chessPiece) return '';
     
     // chess.js renvoie un objet avec type et color
@@ -38,31 +38,31 @@ export default function ChessBoard({ fen, playerColor, currentPlayer, onMove, di
   };
 
   useEffect(() => {
+    const updateBoard = () => {
+      const boardArray: Square[][] = [];
+      const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+      const ranks = playerColor === 'white' ? ['8', '7', '6', '5', '4', '3', '2', '1'] : ['1', '2', '3', '4', '5', '6', '7', '8'];
+
+      for (const rank of ranks) {
+        const row: Square[] = [];
+        for (const file of files) {
+          const square = `${file}${rank}`;
+          const piece = chess.get(square as 'a1');
+          row.push({
+            piece: piece ? convertPieceNotation(piece) : null,
+            file,
+            rank,
+            square
+          });
+        }
+        boardArray.push(row);
+      }
+      setBoard(boardArray);
+    };
+
     chess.load(fen);
     updateBoard();
-  }, [fen, chess]);
-
-  const updateBoard = () => {
-    const boardArray: Square[][] = [];
-    const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
-    const ranks = playerColor === 'white' ? ['8', '7', '6', '5', '4', '3', '2', '1'] : ['1', '2', '3', '4', '5', '6', '7', '8'];
-
-    for (const rank of ranks) {
-      const row: Square[] = [];
-      for (const file of files) {
-        const square = `${file}${rank}`;
-        const piece = chess.get(square as any);
-        row.push({
-          piece: piece ? convertPieceNotation(piece) : null,
-          file,
-          rank,
-          square
-        });
-      }
-      boardArray.push(row);
-    }
-    setBoard(boardArray);
-  };
+  }, [fen, chess, convertPieceNotation, playerColor]);
 
   const handleSquareClick = (square: string) => {
     if (disabled || currentPlayer !== playerColor) return;
@@ -95,10 +95,10 @@ export default function ChessBoard({ fen, playerColor, currentPlayer, onMove, di
       setPossibleMoves([]);
     } else {
       // Sélectionner une nouvelle case
-      const piece = chess.get(square as any);
+      const piece = chess.get(square as 'a1');
       if (piece && piece.color === (playerColor === 'white' ? 'w' : 'b')) {
         setSelectedSquare(square);
-        const moves = chess.moves({ square: square as any, verbose: true });
+        const moves = chess.moves({ square: square as 'a1', verbose: true });
         setPossibleMoves(moves.map(move => move.to));
       } else {
         setSelectedSquare(null);

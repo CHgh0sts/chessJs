@@ -4,11 +4,10 @@ import { useSocket } from '@/contexts/SocketContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDialog } from '@/hooks/useDialog';
 import ChessBoard from '../chess/ChessBoard';
-import ChessTimer from '../chess/ChessTimer';
 import Dialog from '../ui/Dialog';
 
 export default function GameRoom() {
-  const { gameState, makeMove, leaveGame, offerDraw, resign, drawOffer, acceptDraw, declineDraw } = useSocket();
+  const { gameState, makeMove, offerDraw, resign, drawOffer, acceptDraw, declineDraw } = useSocket();
   const { user } = useAuth();
   const { isOpen, dialogOptions, onConfirm, showDialog, hideDialog } = useDialog();
 

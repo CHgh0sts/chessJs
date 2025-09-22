@@ -36,7 +36,7 @@ export default function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFor
     if (success) {
       onSuccess?.();
     } else {
-      setError('Nom d\'utilisateur ou email déjà utilisé');
+        setError('Nom d&apos;utilisateur ou email déjà utilisé');
     }
     setLoading(false);
   };
@@ -54,7 +54,7 @@ export default function RegisterForm({ onSuccess, onSwitchToLogin }: RegisterFor
 
         <div className="mb-4">
           <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="username">
-            Nom d'utilisateur
+            Nom d&apos;utilisateur
           </label>
           <input
             id="username"

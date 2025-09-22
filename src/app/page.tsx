@@ -58,7 +58,7 @@ export default function Home() {
                     <span className="bg-gradient-to-r from-yellow-400 to-orange-500 bg-clip-text text-transparent"> Échecs</span>
                   </h1>
                   <p className="text-xl text-gray-300 mb-8 leading-relaxed">
-                    Affrontez des joueurs du monde entier dans des parties d'échecs palpitantes. 
+                    Affrontez des joueurs du monde entier dans des parties d&apos;échecs palpitantes. 
                     Développez votre stratégie et gravissez les classements !
                   </p>
                   
@@ -119,7 +119,7 @@ export default function Home() {
                 Pourquoi choisir Chess Battle ?
               </h2>
               <p className="text-xl text-gray-400">
-                Une expérience d'échecs moderne et immersive
+                Une expérience d&apos;échecs moderne et immersive
               </p>
             </div>
 
@@ -156,7 +156,7 @@ export default function Home() {
                 <div className="text-5xl mb-6 group-hover:scale-110 transition-transform duration-300">🎯</div>
                 <h3 className="text-2xl font-bold text-white mb-4">Interface Intuitive</h3>
                 <p className="text-gray-400 leading-relaxed">
-                  Design moderne et épuré pour une expérience de jeu optimale. Concentrez-vous sur l'essentiel !
+                  Design moderne et épuré pour une expérience de jeu optimale. Concentrez-vous sur l&apos;essentiel !
                 </p>
               </div>
 
@@ -174,7 +174,7 @@ export default function Home() {
                 <div className="text-5xl mb-6 group-hover:scale-110 transition-transform duration-300">🌍</div>
                 <h3 className="text-2xl font-bold text-white mb-4">Communauté Globale</h3>
                 <p className="text-gray-400 leading-relaxed">
-                  Rejoignez des milliers de joueurs passionnés du monde entier. L'aventure vous attend !
+                  Rejoignez des milliers de joueurs passionnés du monde entier. L&apos;aventure vous attend !
                 </p>
               </div>
             </div>

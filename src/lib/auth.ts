@@ -52,7 +52,8 @@ export async function createUser(username: string, email: string, password: stri
     });
 
     // Retourner l'utilisateur sans le mot de passe
-    const { password: _, ...userWithoutPassword } = user;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password: _password, ...userWithoutPassword } = user;
     return userWithoutPassword as User;
   } catch (error) {
     console.error('Erreur lors de la création de l\'utilisateur:', error);
@@ -77,7 +78,8 @@ export async function loginUser(usernameOrEmail: string, password: string): Prom
     if (!isValid) return null;
 
     // Retourner l'utilisateur sans le mot de passe
-    const { password: _, ...userWithoutPassword } = user;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password: _password, ...userWithoutPassword } = user;
     return userWithoutPassword as User;
   } catch (error) {
     console.error('Erreur lors de la connexion:', error);
@@ -94,7 +96,8 @@ export async function getUserById(id: string): Promise<User | null> {
     if (!user) return null;
 
     // Retourner l'utilisateur sans le mot de passe
-    const { password: _, ...userWithoutPassword } = user;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password: _password, ...userWithoutPassword } = user;
     return userWithoutPassword as User;
   } catch (error) {
     console.error('Erreur lors de la récupération de l\'utilisateur:', error);
