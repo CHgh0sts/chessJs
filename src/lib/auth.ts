@@ -1,9 +1,26 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from './prisma';
-import { User } from '@prisma/client';
+import { User as PrismaUser } from '@prisma/client';
+import { User } from '@/types';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+
+// Fonction utilitaire pour convertir un utilisateur Prisma vers notre type User
+function prismaUserToUser(prismaUser: Omit<PrismaUser, 'password'>): User {
+  return {
+    id: prismaUser.id,
+    username: prismaUser.username,
+    email: prismaUser.email,
+    rating: prismaUser.rating,
+    gamesPlayed: prismaUser.gamesPlayed,
+    gamesWon: prismaUser.gamesWon,
+    gamesLost: prismaUser.gamesLost,
+    gamesDraw: prismaUser.gamesDraw,
+    createdAt: prismaUser.createdAt,
+    updatedAt: prismaUser.updatedAt,
+  };
+}
 
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 12);
@@ -54,7 +71,7 @@ export async function createUser(username: string, email: string, password: stri
     // Retourner l'utilisateur sans le mot de passe
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password: _password, ...userWithoutPassword } = user;
-    return userWithoutPassword as User;
+    return prismaUserToUser(userWithoutPassword);
   } catch (error) {
     console.error('Erreur lors de la création de l\'utilisateur:', error);
     return null;
@@ -63,6 +80,8 @@ export async function createUser(username: string, email: string, password: stri
 
 export async function loginUser(usernameOrEmail: string, password: string): Promise<User | null> {
   try {
+    console.log('🔍 Tentative de connexion pour:', usernameOrEmail);
+    
     const user = await prisma.user.findFirst({
       where: {
         OR: [
@@ -72,17 +91,27 @@ export async function loginUser(usernameOrEmail: string, password: string): Prom
       }
     });
 
-    if (!user) return null;
+    if (!user) {
+      console.log('❌ Utilisateur non trouvé pour:', usernameOrEmail);
+      return null;
+    }
+
+    console.log('✅ Utilisateur trouvé:', user.username);
 
     const isValid = await verifyPassword(password, user.password);
-    if (!isValid) return null;
+    if (!isValid) {
+      console.log('❌ Mot de passe incorrect pour:', user.username);
+      return null;
+    }
+
+    console.log('✅ Connexion réussie pour:', user.username);
 
     // Retourner l'utilisateur sans le mot de passe
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password: _password, ...userWithoutPassword } = user;
-    return userWithoutPassword as User;
+    return prismaUserToUser(userWithoutPassword);
   } catch (error) {
-    console.error('Erreur lors de la connexion:', error);
+    console.error('💥 Erreur lors de la connexion:', error);
     return null;
   }
 }
@@ -98,7 +127,7 @@ export async function getUserById(id: string): Promise<User | null> {
     // Retourner l'utilisateur sans le mot de passe
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password: _password, ...userWithoutPassword } = user;
-    return userWithoutPassword as User;
+    return prismaUserToUser(userWithoutPassword);
   } catch (error) {
     console.error('Erreur lors de la récupération de l\'utilisateur:', error);
     return null;
@@ -121,7 +150,7 @@ export async function getAllUsers(): Promise<User[]> {
         updatedAt: true,
       }
     });
-    return users as User[];
+    return users.map(user => prismaUserToUser(user));
   } catch (error) {
     console.error('Erreur lors de la récupération des utilisateurs:', error);
     return [];

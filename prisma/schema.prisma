@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -14,21 +8,19 @@ datasource db {
 }
 
 model User {
-  id          String   @id @default(cuid())
-  username    String   @unique
-  email       String   @unique
-  password    String
-  rating      Int      @default(1200)
-  gamesPlayed Int      @default(0)
-  gamesWon    Int      @default(0)
-  gamesLost   Int      @default(0)
-  gamesDraw   Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relations
-  gamesAsWhite Game[] @relation("WhitePlayer")
-  gamesAsBlack Game[] @relation("BlackPlayer")
+  id           String   @id @default(cuid())
+  username     String   @unique
+  email        String   @unique
+  password     String
+  rating       Int      @default(1200)
+  gamesPlayed  Int      @default(0)
+  gamesWon     Int      @default(0)
+  gamesLost    Int      @default(0)
+  gamesDraw    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  gamesAsBlack Game[]   @relation("BlackPlayer")
+  gamesAsWhite Game[]   @relation("WhitePlayer")
 
   @@map("users")
 }
@@ -38,19 +30,17 @@ model Game {
   whiteId     String
   blackId     String
   fen         String      @default("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
-  moves       String      @default("") // JSON string of moves
+  moves       String      @default("")
   status      GameStatus  @default(ACTIVE)
   result      GameResult?
-  timeControl Int         @default(600000) // 10 minutes in milliseconds
-  timeLeft    String      @default("{\"white\":600000,\"black\":600000}") // JSON string
+  timeControl Int         @default(600000)
+  timeLeft    String      @default("{\"white\":600000,\"black\":600000}")
   startedAt   DateTime    @default(now())
   endedAt     DateTime?
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
-
-  // Relations
-  whitePlayer User @relation("WhitePlayer", fields: [whiteId], references: [id])
-  blackPlayer User @relation("BlackPlayer", fields: [blackId], references: [id])
+  blackPlayer User        @relation("BlackPlayer", fields: [blackId], references: [id])
+  whitePlayer User        @relation("WhitePlayer", fields: [whiteId], references: [id])
 
   @@map("games")
 }
