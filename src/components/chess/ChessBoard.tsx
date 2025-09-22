@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Chess } from 'chess.js';
 import ChessPiece from './ChessPiece';
 
@@ -26,7 +26,7 @@ export default function ChessBoard({ fen, playerColor, currentPlayer, onMove, di
   const [possibleMoves, setPossibleMoves] = useState<string[]>([]);
   const [lastMove, setLastMove] = useState<string[]>([]);
 
-  const convertPieceNotation = (chessPiece: { type: string; color: string } | null) => {
+  const convertPieceNotation = useCallback((chessPiece: { type: string; color: string } | null) => {
     if (!chessPiece) return '';
     
     // chess.js renvoie un objet avec type et color
@@ -35,7 +35,7 @@ export default function ChessBoard({ fen, playerColor, currentPlayer, onMove, di
     
     // Retourner majuscule pour blanc, minuscule pour noir
     return color === 'w' ? pieceChar : pieceChar.toLowerCase();
-  };
+  }, []);
 
   useEffect(() => {
     const updateBoard = () => {

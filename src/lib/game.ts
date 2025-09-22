@@ -1,19 +1,16 @@
 import { prisma } from './prisma';
-import { Game, GameStatus, GameResult } from '@prisma/client';
+import { GameStatus, GameResult } from '@prisma/client';
 
 export interface GameData {
   id: string;
   whiteId: string;
   blackId: string;
   fen: string;
-  moves: string[];
+      moves: string;
   status: GameStatus;
   result?: GameResult;
   timeControl: number;
-  timeLeft: {
-    white: number;
-    black: number;
-  };
+  timeLeft: string;
   startedAt: Date;
   endedAt?: Date;
 }
@@ -29,13 +26,13 @@ export async function createGame(
       whiteId,
       blackId,
       fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1', // Position initiale
-      moves: [],
-      status: 'ONGOING',
+      moves: "[]",
+      status: 'ACTIVE',
       timeControl,
-      timeLeft: {
+      timeLeft: JSON.stringify({
         white: timeControl,
         black: timeControl,
-      },
+      }),
       startedAt: new Date(),
     },
   });
@@ -49,7 +46,7 @@ export async function createGame(
     status: game.status,
     result: game.result || undefined,
     timeControl: game.timeControl,
-    timeLeft: game.timeLeft as { white: number; black: number },
+    timeLeft: game.timeLeft,
     startedAt: game.startedAt,
     endedAt: game.endedAt || undefined,
   };
@@ -72,7 +69,7 @@ export async function getGameById(gameId: string): Promise<GameData | null> {
     status: game.status,
     result: game.result || undefined,
     timeControl: game.timeControl,
-    timeLeft: game.timeLeft as { white: number; black: number },
+    timeLeft: game.timeLeft,
     startedAt: game.startedAt,
     endedAt: game.endedAt || undefined,
   };
@@ -83,8 +80,8 @@ export async function updateGame(
   gameId: string,
   updates: {
     fen?: string;
-    moves?: string[];
-    timeLeft?: { white: number; black: number };
+    moves?: string;
+    timeLeft?: string;
     status?: GameStatus;
     result?: GameResult;
     endedAt?: Date;
@@ -107,7 +104,7 @@ export async function updateGame(
     status: updatedGame.status,
     result: updatedGame.result || undefined,
     timeControl: updatedGame.timeControl,
-    timeLeft: updatedGame.timeLeft as { white: number; black: number },
+    timeLeft: updatedGame.timeLeft,
     startedAt: updatedGame.startedAt,
     endedAt: updatedGame.endedAt || undefined,
   };
@@ -159,7 +156,7 @@ async function updatePlayerStats(
 
   if (!user) return;
 
-  const updates: any = {
+  const updates: Record<string, number> = {
     gamesPlayed: user.gamesPlayed + 1,
   };
 
@@ -208,7 +205,7 @@ export async function getUserGames(
     status: game.status,
     result: game.result || undefined,
     timeControl: game.timeControl,
-    timeLeft: game.timeLeft as { white: number; black: number },
+    timeLeft: game.timeLeft,
     startedAt: game.startedAt,
     endedAt: game.endedAt || undefined,
   }));
@@ -225,7 +222,7 @@ export async function getUserActiveGames(userId: string): Promise<GameData[]> {
             { blackId: userId },
           ],
         },
-        { status: 'ONGOING' },
+        { status: 'ACTIVE' },
       ],
     },
     orderBy: {
@@ -242,7 +239,7 @@ export async function getUserActiveGames(userId: string): Promise<GameData[]> {
     status: game.status,
     result: game.result || undefined,
     timeControl: game.timeControl,
-    timeLeft: game.timeLeft as { white: number; black: number },
+    timeLeft: game.timeLeft,
     startedAt: game.startedAt,
     endedAt: game.endedAt || undefined,
   }));
