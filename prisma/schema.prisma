@@ -1,0 +1,68 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id          String   @id @default(cuid())
+  username    String   @unique
+  email       String   @unique
+  password    String
+  rating      Int      @default(1200)
+  gamesPlayed Int      @default(0)
+  gamesWon    Int      @default(0)
+  gamesLost   Int      @default(0)
+  gamesDraw   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  gamesAsWhite Game[] @relation("WhitePlayer")
+  gamesAsBlack Game[] @relation("BlackPlayer")
+
+  @@map("users")
+}
+
+model Game {
+  id          String      @id @default(cuid())
+  whiteId     String
+  blackId     String
+  fen         String      @default("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
+  moves       String      @default("") // JSON string of moves
+  status      GameStatus  @default(ACTIVE)
+  result      GameResult?
+  timeControl Int         @default(600000) // 10 minutes in milliseconds
+  timeLeft    String      @default("{\"white\":600000,\"black\":600000}") // JSON string
+  startedAt   DateTime    @default(now())
+  endedAt     DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Relations
+  whitePlayer User @relation("WhitePlayer", fields: [whiteId], references: [id])
+  blackPlayer User @relation("BlackPlayer", fields: [blackId], references: [id])
+
+  @@map("games")
+}
+
+enum GameStatus {
+  WAITING
+  ACTIVE
+  FINISHED
+}
+
+enum GameResult {
+  WHITE_WINS
+  BLACK_WINS
+  DRAW
+}
