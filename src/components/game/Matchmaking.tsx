@@ -7,9 +7,12 @@ export default function Matchmaking() {
   const { user } = useAuth();
   const { connected, waitingForOpponent, findGame } = useSocket();
 
+  console.log('Matchmaking - État de connexion:', { connected, waitingForOpponent });
+
   const handleFindGame = () => {
+    console.log('Tentative de lancement de partie - connected:', connected);
     if (!connected) {
-      alert('Connexion au serveur en cours...');
+      console.warn('Socket non connecté');
       return;
     }
     findGame();
@@ -45,8 +48,13 @@ export default function Matchmaking() {
               disabled={!connected}
               className="bg-blue-500 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-bold py-3 px-8 rounded-lg text-lg transition-colors"
             >
-              {connected ? 'Trouver un adversaire' : 'Connexion...'}
+              {connected ? 'Trouver un adversaire' : 'Connexion au serveur...'}
             </button>
+            
+            {/* Debug info */}
+            <div className="mt-4 text-sm text-gray-500">
+              Debug: {connected ? '🟢 Connecté' : '🔴 Déconnecté'}
+            </div>
           </div>
 
           {/* Statistiques du joueur */}

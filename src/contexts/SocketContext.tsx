@@ -47,16 +47,25 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (user) {
-      const newSocket = io('http://localhost:3000');
+      console.log('👤 Utilisateur connecté, initialisation du socket pour:', user.username);
+      const newSocket = io('http://localhost:3000', {
+        forceNew: true,
+        timeout: 5000,
+      });
       
       newSocket.on('connect', () => {
-        console.log('Connecté au serveur Socket.IO');
+        console.log('✅ Connecté au serveur Socket.IO');
         setConnected(true);
         newSocket.emit('userConnected', user);
       });
 
-      newSocket.on('disconnect', () => {
-        console.log('Déconnecté du serveur Socket.IO');
+      newSocket.on('disconnect', (reason) => {
+        console.log('❌ Déconnecté du serveur Socket.IO. Raison:', reason);
+        setConnected(false);
+      });
+
+      newSocket.on('connect_error', (error) => {
+        console.error('💥 Erreur de connexion Socket.IO:', error);
         setConnected(false);
       });
 
