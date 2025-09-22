@@ -19,7 +19,7 @@ const connectedUsers = new Map();
 async function createNewGame(player1, player2) {
   try {
     // Créer la partie en base de données
-    const dbGame = await createGame(player1.id, player2.id, 600); // 10 minutes
+    const dbGame = await createGame(player1.user.id, player2.user.id, 600); // 10 minutes
     
     const chess = new Chess();
     
@@ -45,8 +45,33 @@ async function createNewGame(player1, player2) {
     console.log('🎮 Nouvelle partie créée en base:', dbGame.id);
     return game;
   } catch (error) {
-    console.error('❌ Erreur lors de la création de la partie:', error);
-    throw error;
+    console.error('❌ Erreur lors de la création de la partie en base, fallback vers mémoire:', error);
+    
+    // Fallback vers la création en mémoire seulement
+    const gameId = Math.random().toString(36).substring(7);
+    const chess = new Chess();
+    
+    const game = {
+      id: gameId,
+      chess,
+      players: {
+        white: player1,
+        black: player2
+      },
+      timeLeft: {
+        white: 10 * 60 * 1000, // 10 minutes en millisecondes
+        black: 10 * 60 * 1000
+      },
+      currentPlayer: 'white',
+      status: 'active',
+      lastMoveTime: Date.now(),
+      spectators: [],
+      dbGame: null // Pas de base de données
+    };
+    
+    games.set(gameId, game);
+    console.log('🎮 Nouvelle partie créée en mémoire (fallback):', gameId);
+    return game;
   }
 }
 
@@ -195,16 +220,18 @@ app.prepare().then(() => {
           game.lastMoveTime = Date.now();
           game.currentPlayer = game.currentPlayer === 'white' ? 'black' : 'white';
 
-          // Sauvegarder le coup en base de données
-          try {
-            await updateGame(gameId, {
-              fen: game.chess.fen(),
-              moves: game.chess.history(),
-              timeLeft: game.timeLeft
-            });
-            console.log('💾 Coup sauvegardé en base:', moveResult.san);
-          } catch (dbError) {
-            console.error('❌ Erreur de sauvegarde:', dbError);
+          // Sauvegarder le coup en base de données (si la partie a été créée en base)
+          if (game.dbGame) {
+            try {
+              await updateGame(gameId, {
+                fen: game.chess.fen(),
+                moves: game.chess.history(),
+                timeLeft: game.timeLeft
+              });
+              console.log('💾 Coup sauvegardé en base:', moveResult.san);
+            } catch (dbError) {
+              console.error('❌ Erreur de sauvegarde:', dbError);
+            }
           }
 
           // Vérifier les conditions de fin de partie

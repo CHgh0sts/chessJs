@@ -7,10 +7,7 @@ export default function Matchmaking() {
   const { user } = useAuth();
   const { connected, waitingForOpponent, findGame } = useSocket();
 
-  console.log('Matchmaking - État de connexion:', { connected, waitingForOpponent });
-
   const handleFindGame = () => {
-    console.log('Tentative de lancement de partie - connected:', connected);
     if (!connected) {
       console.warn('Socket non connecté');
       return;
@@ -50,11 +47,6 @@ export default function Matchmaking() {
             >
               {connected ? 'Trouver un adversaire' : 'Connexion au serveur...'}
             </button>
-            
-            {/* Debug info */}
-            <div className="mt-4 text-sm text-gray-500">
-              Debug: {connected ? '🟢 Connecté' : '🔴 Déconnecté'}
-            </div>
           </div>
 
           {/* Statistiques du joueur */}
