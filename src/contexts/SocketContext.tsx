@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from './AuthContext';
 import { User } from '@/types';
+import { getSocketDebugInfo } from '@/utils/debug';
 
 interface GameState {
   gameId: string;
@@ -48,9 +49,21 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (user) {
       console.log('👤 Utilisateur connecté, initialisation du socket pour:', user.username);
-      const newSocket = io('http://localhost:3000', {
+      getSocketDebugInfo();
+      // Utiliser l'URL configurée, sinon l'URL actuelle en production, localhost en développement
+      const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL || 
+        (process.env.NODE_ENV === 'production' 
+          ? window.location.origin 
+          : 'http://localhost:3000');
+        
+      console.log('🔗 Connexion Socket.IO vers:', socketUrl);
+      
+      const newSocket = io(socketUrl, {
         forceNew: true,
-        timeout: 5000,
+        timeout: 10000,
+        transports: ['websocket', 'polling'],
+        upgrade: true,
+        rememberUpgrade: true,
       });
       
       newSocket.on('connect', () => {
@@ -66,7 +79,21 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
 
       newSocket.on('connect_error', (error) => {
         console.error('💥 Erreur de connexion Socket.IO:', error);
+        console.error('🔗 URL tentée:', socketUrl);
         setConnected(false);
+      });
+
+      newSocket.on('reconnect', (attemptNumber) => {
+        console.log('🔄 Reconnexion réussie après', attemptNumber, 'tentatives');
+        setConnected(true);
+      });
+
+      newSocket.on('reconnect_attempt', (attemptNumber) => {
+        console.log('🔄 Tentative de reconnexion #', attemptNumber);
+      });
+
+      newSocket.on('reconnect_error', (error) => {
+        console.error('💥 Erreur de reconnexion:', error);
       });
 
       newSocket.on('waitingForOpponent', () => {
