@@ -213,7 +213,7 @@ export default function GameRoom() {
           </div>
 
           {/* Panneau latéral */}
-          <div className="flex flex-col space-y-6">
+          <div className="flex flex-col space-y-6 w-80 flex-shrink-0">
 
             {/* Informations de partie */}
             <div className="bg-gray-700 rounded-lg shadow-lg p-6">
@@ -259,7 +259,7 @@ export default function GameRoom() {
             </div>
 
             {/* Actions */}
-            {gameState.status === 'active' && (
+            {gameState.status !== 'finished' && (
               <div className="bg-gray-700 rounded-lg shadow-lg p-6">
                 <h3 className="text-lg font-bold text-white mb-4">Actions</h3>
                 <div className="space-y-2">
