@@ -292,13 +292,13 @@ function evaluateMoveSafety(chess, moveObj) {
         // Pièce non défendue et attaquée par une pièce moins chère = TRÈS DANGEREUX
         safetyScore -= pieceValue * 0.8;
         evaluation.pieceInDanger = true;
-        console.log(`⚠️ DANGER: ${moveObj.piece} sur ${moveObj.to} peut être pris par ${cheapestAttacker} (perte: -${pieceValue * 0.8})`);
+        // console.log(`⚠️ DANGER: ${moveObj.piece} sur ${moveObj.to} peut être pris par ${cheapestAttacker} (perte: -${pieceValue * 0.8})`);
       } else {
         // Pièce défendue mais échange défavorable possible
         const cheapestDefender = Math.min(...defenders);
         if (cheapestAttacker < cheapestDefender) {
           safetyScore -= (pieceValue - cheapestAttacker) * 0.3;
-          console.log(`⚠️ Échange défavorable possible sur ${moveObj.to}`);
+          // console.log(`⚠️ Échange défavorable possible sur ${moveObj.to}`);
         }
       }
     }
@@ -309,7 +309,7 @@ function evaluateMoveSafety(chess, moveObj) {
   for (const exposed of exposedPieces) {
     safetyScore -= exposed.value * 0.6;
     evaluation.exposedPieces.push(exposed);
-    console.log(`⚠️ EXPOSITION: Bouger ${moveObj.piece} expose ${exposed.piece} sur ${exposed.square} (perte: -${exposed.value * 0.6})`);
+    // console.log(`⚠️ EXPOSITION: Bouger ${moveObj.piece} expose ${exposed.piece} sur ${exposed.square} (perte: -${exposed.value * 0.6})`);
   }
   
   evaluation.score = safetyScore;
@@ -421,11 +421,9 @@ function getBestMove(chess, depth = 3) {
   // Vérifier s'il y a des captures VRAIMENT bonnes (gratuites ou très profitables)
   const goodCaptures = findGoodCaptures(chess, moves);
   if (goodCaptures.length > 0) {
-    console.log(`🎯 Bot trouve ${goodCaptures.length} bonne(s) capture(s):`, goodCaptures.map(c => `${c.move} (+${c.finalScore})`));
-    
     // Prendre la meilleure capture profitable
     const bestCapture = goodCaptures[0]; // Déjà triées par score
-    console.log(`🎯 Bot choisit la capture: ${bestCapture.move} (gain net: +${bestCapture.finalScore})`);
+    console.log(`🎯 Bot capture: ${bestCapture.move} (gain: +${bestCapture.finalScore})`);
     return bestCapture.move;
   }
   
@@ -451,7 +449,7 @@ function getBestMove(chess, depth = 3) {
     const moveEval = evaluateMove(chess, move);
     // Rejeter les coups avec une perte de sécurité > 200 points
     if (moveEval.safety.score < -200) {
-      console.log(`❌ Coup ${move} rejeté: trop dangereux (${moveEval.safety.score})`);
+      // console.log(`❌ Coup ${move} rejeté: trop dangereux (${moveEval.safety.score})`);
       return false;
     }
     return true;
@@ -462,7 +460,7 @@ function getBestMove(chess, depth = 3) {
     safeMoves.slice(0, Math.min(20, safeMoves.length)) :
     orderedMoves.slice(0, Math.min(5, orderedMoves.length)); // Seulement les 5 meilleurs si tous dangereux
   
-  console.log(`🎯 Évaluation de ${movesToEvaluate.length} coups sûrs sur ${moves.length} possibles`);
+  // console.log(`🎯 Évaluation de ${movesToEvaluate.length} coups sûrs sur ${moves.length} possibles`);
   
   for (const move of movesToEvaluate) {
     chess.move(move);
@@ -495,7 +493,10 @@ function findGoodCaptures(chess, moves) {
       // Calculer l'échange complet (SEE - Static Exchange Evaluation)
       const exchangeValue = calculateExchange(captureValue, attackerValue, attackers, defenders);
       
-      console.log(`📊 Analyse capture ${move}: ${moveObj.piece}x${moveObj.captured} = ${exchangeValue > 0 ? '+' : ''}${exchangeValue}`);
+      // Log seulement les captures importantes
+      if (exchangeValue < 0) {
+        console.log(`📊 Capture ${move} rejetée: ${moveObj.piece}x${moveObj.captured} = ${exchangeValue}`);
+      }
       
       // Seulement garder les captures profitables ou égales
       if (exchangeValue >= 0) {
@@ -508,7 +509,7 @@ function findGoodCaptures(chess, moves) {
           finalScore: exchangeValue + (exchangeValue > 0 ? 50 : 0) // Bonus pour gain net
         });
       } else {
-        console.log(`❌ Capture ${move} rejetée: perte de ${-exchangeValue} points`);
+        // Log déjà fait au-dessus
       }
     }
     chess.undo();
