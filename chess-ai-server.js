@@ -10,9 +10,9 @@ const PIECE_VALUES = {
   'k': 20000  // Roi
 };
 
-// Bonus pour les coups tactiques (captures prioritaires)
+// Bonus pour les coups tactiques (captures équilibrées)
 const TACTICAL_BONUS = {
-  CAPTURE: 500,  // ÉNORME bonus pour les captures
+  CAPTURE: 50,   // Bonus modéré - l'évaluation SEE fait le travail
   CHECK: 30,
   CASTLE: 40,
   PROMOTION: 800,
@@ -229,10 +229,9 @@ function evaluateMove(chess, move) {
   const moveObj = chess.move(move);
   let score = 0;
   
-  // Bonus ÉNORME pour les captures
+  // Bonus pour les captures (évaluation normale)
   if (moveObj.captured) {
-    score += PIECE_VALUES[moveObj.captured] * 2 + TACTICAL_BONUS.CAPTURE;
-    console.log(`🎯 Évaluation capture ${move}: +${PIECE_VALUES[moveObj.captured] * 2 + TACTICAL_BONUS.CAPTURE} points`);
+    score += PIECE_VALUES[moveObj.captured] + TACTICAL_BONUS.CAPTURE;
   }
   
   // Bonus pour les échecs
@@ -275,28 +274,25 @@ function orderMoves(chess, moves) {
   return evaluatedMoves.map(item => item.move);
 }
 
-// Trouver le meilleur coup (amélioré avec priorité captures)
+// Trouver le meilleur coup (évaluation intelligente des captures)
 function getBestMove(chess, depth = 3) {
   const moves = chess.moves();
   if (moves.length === 0) return null;
   
-  // PRIORITÉ ABSOLUE : Vérifier les captures gratuites d'abord
-  const captures = findCaptures(chess, moves);
-  if (captures.length > 0) {
-    console.log(`🎯 Bot trouve ${captures.length} capture(s) possible(s):`, captures.map(c => c.move));
+  // Vérifier s'il y a des captures VRAIMENT bonnes (gratuites ou très profitables)
+  const goodCaptures = findGoodCaptures(chess, moves);
+  if (goodCaptures.length > 0) {
+    console.log(`🎯 Bot trouve ${goodCaptures.length} bonne(s) capture(s):`, goodCaptures.map(c => `${c.move} (+${c.finalScore})`));
     
-    // Prendre la meilleure capture (pièce la plus valuable)
-    const bestCapture = captures.reduce((best, current) => 
-      current.value > best.value ? current : best
-    );
-    
-    console.log(`🎯 Bot choisit la capture: ${bestCapture.move} (valeur: ${bestCapture.value})`);
+    // Prendre la meilleure capture profitable
+    const bestCapture = goodCaptures[0]; // Déjà triées par score
+    console.log(`🎯 Bot choisit la capture: ${bestCapture.move} (gain net: +${bestCapture.finalScore})`);
     return bestCapture.move;
   }
   
   const moveCount = chess.history().length;
   
-  // Livre d'ouverture seulement si pas de captures
+  // Livre d'ouverture seulement si pas de bonnes captures
   if (moveCount < 6) {
     const openingBook = getOpeningMove(chess, moveCount);
     if (openingBook && moves.includes(openingBook)) {
@@ -328,9 +324,9 @@ function getBestMove(chess, depth = 3) {
   return bestMove || moves[0];
 }
 
-// Trouver toutes les captures possibles avec leur valeur
-function findCaptures(chess, moves) {
-  const captures = [];
+// Trouver seulement les BONNES captures (profitables ou sûres)
+function findGoodCaptures(chess, moves) {
+  const goodCaptures = [];
   
   for (const move of moves) {
     const moveObj = chess.move(move);
@@ -338,34 +334,80 @@ function findCaptures(chess, moves) {
       const captureValue = PIECE_VALUES[moveObj.captured];
       const attackerValue = PIECE_VALUES[moveObj.piece];
       
-      // Vérifier si la capture est sûre (pas de contre-attaque immédiate)
-      const isSafe = !isSquareAttacked(chess, moveObj.to, moveObj.color === 'w' ? 'b' : 'w');
+      // Analyser la sécurité de la capture
+      const attackers = getAttackers(chess, moveObj.to, moveObj.color === 'w' ? 'b' : 'w');
+      const defenders = getAttackers(chess, moveObj.to, moveObj.color);
       
-      captures.push({
-        move: move,
-        captured: moveObj.captured,
-        value: captureValue,
-        attackerValue: attackerValue,
-        isSafe: isSafe,
-        // Score final : valeur capturée + bonus sécurité
-        finalScore: captureValue + (isSafe ? 100 : -attackerValue * 0.5)
-      });
+      // Calculer l'échange complet (SEE - Static Exchange Evaluation)
+      const exchangeValue = calculateExchange(captureValue, attackerValue, attackers, defenders);
+      
+      console.log(`📊 Analyse capture ${move}: ${moveObj.piece}x${moveObj.captured} = ${exchangeValue > 0 ? '+' : ''}${exchangeValue}`);
+      
+      // Seulement garder les captures profitables ou égales
+      if (exchangeValue >= 0) {
+        goodCaptures.push({
+          move: move,
+          captured: moveObj.captured,
+          captureValue: captureValue,
+          attackerValue: attackerValue,
+          exchangeValue: exchangeValue,
+          finalScore: exchangeValue + (exchangeValue > 0 ? 50 : 0) // Bonus pour gain net
+        });
+      } else {
+        console.log(`❌ Capture ${move} rejetée: perte de ${-exchangeValue} points`);
+      }
     }
     chess.undo();
   }
   
   // Trier par score final décroissant
-  captures.sort((a, b) => b.finalScore - a.finalScore);
+  goodCaptures.sort((a, b) => b.finalScore - a.finalScore);
   
-  return captures;
+  return goodCaptures;
 }
 
-// Vérifier si une case est attaquée par une couleur
-function isSquareAttacked(chess, square, byColor) {
-  const moves = chess.moves({ verbose: true });
-  return moves.some(move => move.to === square && 
-    chess.get(move.from) && chess.get(move.from).color === byColor);
+// Calculer l'échange complet (Static Exchange Evaluation)
+function calculateExchange(captureValue, attackerValue, attackers, defenders) {
+  // Simulation simple de l'échange
+  let gain = captureValue; // On gagne la pièce capturée
+  let loss = 0;
+  
+  // Si la case est défendue, on risque de perdre notre pièce
+  if (attackers.length > 0) {
+    // Prendre la pièce la moins valuable qui peut nous attaquer
+    const cheapestAttacker = Math.min(...attackers);
+    if (cheapestAttacker <= attackerValue) {
+      loss = attackerValue; // On perd notre pièce
+      
+      // Si on a des défenseurs, on peut reprendre
+      if (defenders.length > 0) {
+        const cheapestDefender = Math.min(...defenders);
+        gain += cheapestAttacker; // On reprend leur pièce
+        
+        // Simplification: on s'arrête là pour éviter la complexité
+      }
+    }
+  }
+  
+  return gain - loss;
 }
+
+// Obtenir les valeurs des pièces qui attaquent une case
+function getAttackers(chess, square, color) {
+  const attackers = [];
+  const moves = chess.moves({ verbose: true });
+  
+  for (const move of moves) {
+    if (move.to === square && chess.get(move.from) && chess.get(move.from).color === color) {
+      const piece = chess.get(move.from);
+      attackers.push(PIECE_VALUES[piece.type]);
+    }
+  }
+  
+  return attackers;
+}
+
+// Fonction supprimée - remplacée par getAttackers() plus précise
 
 // Livre d'ouverture intelligent
 function getOpeningMove(chess, moveCount) {
