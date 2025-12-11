@@ -5,6 +5,7 @@ import { io, Socket } from 'socket.io-client';
 import { useAuth } from './AuthContext';
 import { User } from '@/types';
 import { getSocketDebugInfo } from '@/utils/debug';
+import { useSound } from '@/hooks/useSound';
 
 interface GameState {
   gameId: string;
@@ -78,6 +79,9 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   const [drawOffer, setDrawOffer] = useState<string | null>(null);
   const [friendlyGameOffer, setFriendlyGameOffer] = useState<string | null>(null);
   const { user } = useAuth();
+  
+  // Hook pour les sons
+  const sounds = useSound();
 
   // Sauvegarder automatiquement l'état de jeu quand il change
   useEffect(() => {
@@ -187,6 +191,14 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
           moves: data.moves || [],
           isFriendlyGame: data.isFriendlyGame || false
         });
+        
+        // Son de début de partie
+        sounds.playGameStartSound();
+        
+        // Son "votre tour" si c'est au joueur de commencer
+        if (data.color === 'white') {
+          setTimeout(() => sounds.playYourTurnSound(), 800);
+        }
       });
 
       // Gérer la reconnexion à une partie existante
@@ -204,6 +216,11 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
           moves: data.moves || [],
           isFriendlyGame: data.isFriendlyGame || false
         });
+        
+        // Son "votre tour" si c'est au joueur de jouer
+        if ((data.currentPlayer || 'white') === data.color && (data.status || 'active') === 'active') {
+          setTimeout(() => sounds.playYourTurnSound(), 500);
+        }
       });
 
       newSocket.on('gameNotFound', (data) => {
@@ -215,15 +232,41 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       });
 
       newSocket.on('moveMade', (data) => {
-        setGameState(prev => prev ? {
-          ...prev,
-          fen: data.fen,
-          currentPlayer: data.currentPlayer,
-          status: data.status,
-          winner: data.winner,
-          winReason: data.winReason,
-          moves: data.moves || prev.moves
-        } : null);
+        setGameState(prev => {
+          if (!prev) return null;
+          
+          const newState = {
+            ...prev,
+            fen: data.fen,
+            currentPlayer: data.currentPlayer,
+            status: data.status,
+            winner: data.winner,
+            winReason: data.winReason,
+            moves: data.moves || prev.moves
+          };
+          
+          // Effets sonores pour les mouvements
+          if (data.move) {
+            // Vérifier si c'est une capture (le coup contient 'x')
+            if (data.move.includes('x')) {
+              sounds.playCaptureSound();
+            } else {
+              sounds.playMoveSound();
+            }
+            
+            // Vérifier si c'est un échec (le coup se termine par '+')
+            if (data.move.includes('+')) {
+              setTimeout(() => sounds.playCheckSound(), 200);
+            }
+          }
+          
+          // Son "votre tour" si c'est maintenant au joueur de jouer
+          if (data.currentPlayer === prev.color && data.status === 'active') {
+            setTimeout(() => sounds.playYourTurnSound(), 300);
+          }
+          
+          return newState;
+        });
       });
 
       newSocket.on('timeUpdate', (timeLeft) => {
@@ -241,6 +284,9 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
           winReason: data.reason
         } : null);
         
+        // Son de fin de partie
+        sounds.playGameEndSound();
+        
         // Nettoyer automatiquement après 5 secondes
         setTimeout(() => {
           setGameState(null);
@@ -254,6 +300,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
 
       newSocket.on('drawOffered', (data) => {
         setDrawOffer(data.from);
+        // Son de notification pour l'offre
+        sounds.playYourTurnSound();
       });
 
       newSocket.on('drawOfferSent', () => {
@@ -268,6 +316,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
 
       newSocket.on('friendlyGameOffered', (data) => {
         setFriendlyGameOffer(data.from);
+        // Son de notification pour l'offre
+        sounds.playYourTurnSound();
       });
 
       newSocket.on('friendlyGameAccepted', () => {
@@ -298,7 +348,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       setWaitingForOpponent(false);
       // Ne pas nettoyer gameState ici pour permettre la reconnexion
     };
-  }, [user]);
+  }, [user, sounds]);
 
   const findGame = () => {
     if (socket) {

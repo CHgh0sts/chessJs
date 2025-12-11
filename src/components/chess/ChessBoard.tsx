@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Chess } from 'chess.js';
 import ChessPiece from './ChessPiece';
+import { useSound } from '@/hooks/useSound';
 
 interface ChessBoardProps {
   fen: string;
@@ -24,6 +25,7 @@ export default function ChessBoard({ fen, playerColor, currentPlayer, onMove, di
   const [board, setBoard] = useState<Square[][]>([]);
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const [possibleMoves, setPossibleMoves] = useState<string[]>([]);
+  const { playMoveSound, playCaptureSound } = useSound();
   const [lastMove, setLastMove] = useState<string[]>([]);
 
   const convertPieceNotation = useCallback((chessPiece: { type: string; color: string } | null) => {
@@ -84,6 +86,13 @@ export default function ChessBoard({ fen, playerColor, currentPlayer, onMove, di
         });
         
         if (move) {
+          // Son local pour le mouvement du joueur
+          if (move.captured) {
+            playCaptureSound();
+          } else {
+            playMoveSound();
+          }
+          
           onMove(`${selectedSquare}${square}`);
           setLastMove([selectedSquare, square]);
         }
