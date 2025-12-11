@@ -326,12 +326,13 @@ export default function GameRoom() {
               <div className="max-h-64 overflow-y-auto">
                 {gameState.moves && gameState.moves.length > 0 ? (
                   <div className="space-y-1">
-                    {gameState.moves.map((move, index) => {
+                    {gameState.moves.slice().reverse().map((move, reverseIndex) => {
+                      const index = gameState.moves.length - 1 - reverseIndex;
                       const moveNumber = Math.floor(index / 2) + 1;
                       const isWhiteMove = index % 2 === 0;
                       
                       return (
-                        <div key={index} className="flex items-center text-sm">
+                        <div key={`move-${index}`} className="flex items-center text-sm">
                           {isWhiteMove && (
                             <span className="text-gray-300 font-mono w-8 text-right mr-2">
                               {moveNumber}.
