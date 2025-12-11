@@ -89,7 +89,9 @@ function startGameTimer(game, io) {
     }
     
     const now = Date.now();
-    const timeDiff = now - game.lastMoveTime;
+    const rawTimeDiff = now - game.lastMoveTime;
+    // Limiter le timeDiff à maximum 1100ms pour éviter les gros sauts
+    const timeDiff = Math.min(rawTimeDiff, 1100);
     
     // Décrémenter le temps pour tous les joueurs (bot inclus)
     if (game.currentPlayer === 'white') {
