@@ -42,6 +42,7 @@ async function createNewGame(player1, player2) {
       status: 'active',
       lastMoveTime: Date.now(),
       spectators: [],
+      isFriendlyGame: false,
       dbGame // Référence vers la partie en base
     };
 
@@ -69,7 +70,8 @@ async function createNewGame(player1, player2) {
       currentPlayer: 'white',
       status: 'active',
       lastMoveTime: Date.now(),
-      spectators: []
+      spectators: [],
+      isFriendlyGame: false
     };
     
     games.set(gameId, game);
@@ -80,7 +82,7 @@ async function createNewGame(player1, player2) {
 
 function startGameTimer(game, io) {
   const timer = setInterval(() => {
-    if (game.status !== 'active') {
+    if (game.status !== 'active' || game.isFriendlyGame) {
       clearInterval(timer);
       return;
     }
@@ -192,6 +194,7 @@ app.prepare().then(() => {
             status: 'active',
             lastMoveTime: dbGame.lastMoveTime ? dbGame.lastMoveTime.getTime() : Date.now(),
             spectators: [],
+            isFriendlyGame: false, // Par défaut, les parties restaurées ne sont pas amicales
             dbGame
           };
           
@@ -244,7 +247,8 @@ app.prepare().then(() => {
         currentPlayer: game.currentPlayer,
         timeLeft: game.timeLeft,
         status: game.status,
-        moves: game.chess.history()
+        moves: game.chess.history(),
+        isFriendlyGame: game.isFriendlyGame
       });
 
       console.log(`✅ ${user.username} a rejoint la partie ${gameId} en tant que ${playerColor}`);
@@ -282,7 +286,8 @@ app.prepare().then(() => {
           opponent: opponent.user,
           fen: game.chess.fen(),
           timeLeft: game.timeLeft,
-          moves: game.chess.history()
+          moves: game.chess.history(),
+          isFriendlyGame: game.isFriendlyGame
         });
 
         opponent.socket.emit('gameFound', {
@@ -291,7 +296,8 @@ app.prepare().then(() => {
           opponent: user,
           fen: game.chess.fen(),
           timeLeft: game.timeLeft,
-          moves: game.chess.history()
+          moves: game.chess.history(),
+          isFriendlyGame: game.isFriendlyGame
         });
 
         // Démarrer le timer
@@ -514,6 +520,94 @@ app.prepare().then(() => {
       
       clearInterval(game.timer);
       io.to(gameId).emit('gameOver', { winner, reason: 'resignation' });
+    });
+
+    socket.on('offerFriendlyGame', (data) => {
+      const { gameId } = data;
+      const game = games.get(gameId);
+
+      if (!game || game.status !== 'active') {
+        socket.emit('error', 'Partie non trouvée ou terminée');
+        return;
+      }
+
+      const user = socket.user;
+      if (!user) {
+        socket.emit('error', 'Utilisateur non authentifié');
+        return;
+      }
+
+      // Vérifier que l'utilisateur est dans la partie
+      const isPlayerInGame = game.players.white.user.id === user.id || game.players.black.user.id === user.id;
+      if (!isPlayerInGame) {
+        socket.emit('error', 'Vous n\'êtes pas dans cette partie');
+        return;
+      }
+
+      // Envoyer l'offre de partie amicale à l'adversaire
+      const opponentSocketId = game.players.white.user.id === user.id 
+        ? game.players.black.socketId 
+        : game.players.white.socketId;
+      
+      io.to(opponentSocketId).emit('friendlyGameOffered', {
+        from: user.username
+      });
+
+      console.log(`🤝 ${user.username} propose une partie amicale dans ${gameId}`);
+    });
+
+    socket.on('acceptFriendlyGame', (data) => {
+      const { gameId } = data;
+      const game = games.get(gameId);
+
+      if (!game || game.status !== 'active') {
+        socket.emit('error', 'Partie non trouvée ou terminée');
+        return;
+      }
+
+      // Activer le mode partie amicale
+      game.isFriendlyGame = true;
+      
+      // Arrêter le timer
+      if (game.timer) {
+        clearInterval(game.timer);
+        game.timer = null;
+      }
+
+      // Informer les deux joueurs
+      io.to(gameId).emit('friendlyGameAccepted');
+      
+      // Mettre à jour en DB si disponible
+      if (game.dbGame) {
+        updateGame(gameId, {
+          // On peut ajouter un champ isFriendlyGame en DB plus tard si nécessaire
+        }).catch(error => {
+          console.error('❌ Erreur mise à jour partie amicale DB:', error);
+        });
+      }
+
+      console.log(`🤝 Partie amicale activée pour ${gameId} - Timer désactivé`);
+    });
+
+    socket.on('declineFriendlyGame', (data) => {
+      const { gameId } = data;
+      const game = games.get(gameId);
+
+      if (!game || game.status !== 'active') {
+        return;
+      }
+
+      const user = socket.user;
+      if (!user) return;
+
+      // Informer l'adversaire que l'offre a été refusée
+      const opponentSocketId = game.players.white.user.id === user.id 
+        ? game.players.black.socketId 
+        : game.players.white.socketId;
+      
+      io.to(opponentSocketId).emit('friendlyGameDeclined');
+      
+      console.log(`🤝 Offre de partie amicale refusée dans ${gameId}`);
     });
 
     socket.on('disconnect', () => {

@@ -20,6 +20,7 @@ interface GameState {
   winner?: 'white' | 'black' | 'draw';
   winReason?: string;
   moves: string[];
+  isFriendlyGame?: boolean;
 }
 
 interface SocketContextType {
@@ -28,6 +29,7 @@ interface SocketContextType {
   gameState: GameState | null;
   waitingForOpponent: boolean;
   drawOffer: string | null;
+  friendlyGameOffer: string | null;
   findGame: () => void;
   makeMove: (move: string) => void;
   leaveGame: () => void;
@@ -35,6 +37,9 @@ interface SocketContextType {
   acceptDraw: () => void;
   declineDraw: () => void;
   resign: () => void;
+  offerFriendlyGame: () => void;
+  acceptFriendlyGame: () => void;
+  declineFriendlyGame: () => void;
 }
 
 const SocketContext = createContext<SocketContextType | undefined>(undefined);
@@ -71,6 +76,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   const [gameState, setGameState] = useState<GameState | null>(() => loadGameState());
   const [waitingForOpponent, setWaitingForOpponent] = useState(false);
   const [drawOffer, setDrawOffer] = useState<string | null>(null);
+  const [friendlyGameOffer, setFriendlyGameOffer] = useState<string | null>(null);
   const { user } = useAuth();
 
   // Sauvegarder automatiquement l'état de jeu quand il change
@@ -178,7 +184,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
           currentPlayer: 'white',
           timeLeft: data.timeLeft,
           status: 'active',
-          moves: data.moves || []
+          moves: data.moves || [],
+          isFriendlyGame: data.isFriendlyGame || false
         });
       });
 
@@ -194,7 +201,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
           currentPlayer: data.currentPlayer || 'white',
           timeLeft: data.timeLeft,
           status: data.status || 'active',
-          moves: data.moves || []
+          moves: data.moves || [],
+          isFriendlyGame: data.isFriendlyGame || false
         });
       });
 
@@ -256,6 +264,24 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       newSocket.on('drawDeclined', () => {
         // Notification sera gérée par le composant
         console.log('Draw offer declined');
+      });
+
+      newSocket.on('friendlyGameOffered', (data) => {
+        setFriendlyGameOffer(data.from);
+      });
+
+      newSocket.on('friendlyGameAccepted', () => {
+        setGameState(prev => prev ? {
+          ...prev,
+          isFriendlyGame: true
+        } : null);
+        setFriendlyGameOffer(null);
+        console.log('Friendly game mode activated - no timer!');
+      });
+
+      newSocket.on('friendlyGameDeclined', () => {
+        setFriendlyGameOffer(null);
+        console.log('Friendly game offer declined');
       });
 
       setSocket(newSocket);
@@ -328,6 +354,28 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const offerFriendlyGame = () => {
+    console.log('offerFriendlyGame called', { socket: !!socket, gameState: !!gameState });
+    if (socket && gameState) {
+      socket.emit('offerFriendlyGame', { gameId: gameState.gameId });
+      console.log('Friendly game offer sent');
+    }
+  };
+
+  const acceptFriendlyGame = () => {
+    if (socket && gameState) {
+      socket.emit('acceptFriendlyGame', { gameId: gameState.gameId });
+      setFriendlyGameOffer(null);
+    }
+  };
+
+  const declineFriendlyGame = () => {
+    if (socket && gameState) {
+      socket.emit('declineFriendlyGame', { gameId: gameState.gameId });
+      setFriendlyGameOffer(null);
+    }
+  };
+
   return (
     <SocketContext.Provider value={{
       socket,
@@ -335,13 +383,17 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       gameState,
       waitingForOpponent,
       drawOffer,
+      friendlyGameOffer,
       findGame,
       makeMove,
       leaveGame,
       offerDraw,
       acceptDraw,
       declineDraw,
-      resign
+      resign,
+      offerFriendlyGame,
+      acceptFriendlyGame,
+      declineFriendlyGame
     }}>
       {children}
     </SocketContext.Provider>

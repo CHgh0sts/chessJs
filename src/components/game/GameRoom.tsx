@@ -7,7 +7,7 @@ import ChessBoard from '../chess/ChessBoard';
 import Dialog from '../ui/Dialog';
 
 export default function GameRoom() {
-  const { gameState, makeMove, offerDraw, resign, drawOffer, acceptDraw, declineDraw } = useSocket();
+  const { gameState, makeMove, offerDraw, resign, drawOffer, acceptDraw, declineDraw, friendlyGameOffer, offerFriendlyGame, acceptFriendlyGame, declineFriendlyGame } = useSocket();
   const { user } = useAuth();
   const { isOpen, dialogOptions, onConfirm, showDialog, hideDialog } = useDialog();
 
@@ -89,6 +89,29 @@ export default function GameRoom() {
             </div>
           </div>
         )}
+        
+        {/* Offre de partie amicale */}
+        {friendlyGameOffer && (
+          <div className="bg-blue-100 border border-blue-400 text-blue-800 px-4 py-3 rounded mb-4 text-center">
+            <div className="font-bold">🤝 Offre de partie amicale</div>
+            <div className="text-sm mb-2">{friendlyGameOffer} vous propose de jouer sans timer</div>
+            <div className="space-x-2">
+              <button
+                onClick={acceptFriendlyGame}
+                className="bg-green-500 hover:bg-green-700 text-white font-bold py-1 px-3 rounded text-sm"
+              >
+                Accepter
+              </button>
+              <button
+                onClick={declineFriendlyGame}
+                className="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-3 rounded text-sm"
+              >
+                Refuser
+              </button>
+            </div>
+          </div>
+        )}
+        
         {/* Messages de statut */}
         {getGameStatusMessage() && (
           <div className={`mb-6 p-4 rounded-lg text-center ${
@@ -120,17 +143,23 @@ export default function GameRoom() {
                   </div>
                 </div>
                 <div className={`px-2 py-1 rounded font-mono text-sm font-bold border ${
-                  gameState.currentPlayer !== gameState.color
+                  gameState.isFriendlyGame
+                    ? 'bg-blue-100 border-blue-300 text-blue-800'
+                    : gameState.currentPlayer !== gameState.color
                     ? 'bg-green-100 border-green-500 text-green-800'
                     : 'bg-gray-100 border-gray-300 text-gray-600'
                 } ${
-                  gameState.timeLeft[gameState.color === 'white' ? 'black' : 'white'] <= 30000
+                  !gameState.isFriendlyGame && gameState.timeLeft[gameState.color === 'white' ? 'black' : 'white'] <= 30000
                     ? 'text-red-600 bg-red-100 border-red-500'
                     : ''
                 }`}>
-                  {Math.floor(gameState.timeLeft[gameState.color === 'white' ? 'black' : 'white'] / 60000)}:
-                  {Math.floor((gameState.timeLeft[gameState.color === 'white' ? 'black' : 'white'] % 60000) / 1000)
-                    .toString().padStart(2, '0')}
+                  {gameState.isFriendlyGame ? '∞' : (
+                    <>
+                      {Math.floor(gameState.timeLeft[gameState.color === 'white' ? 'black' : 'white'] / 60000)}:
+                      {Math.floor((gameState.timeLeft[gameState.color === 'white' ? 'black' : 'white'] % 60000) / 1000)
+                        .toString().padStart(2, '0')}
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -161,17 +190,23 @@ export default function GameRoom() {
                   </div>
                 </div>
                 <div className={`px-2 py-1 rounded font-mono text-sm font-bold border ${
-                  gameState.currentPlayer === gameState.color
+                  gameState.isFriendlyGame
+                    ? 'bg-blue-100 border-blue-300 text-blue-800'
+                    : gameState.currentPlayer === gameState.color
                     ? 'bg-green-100 border-green-500 text-green-800'
                     : 'bg-gray-100 border-gray-300 text-gray-600'
                 } ${
-                  gameState.timeLeft[gameState.color] <= 30000
+                  !gameState.isFriendlyGame && gameState.timeLeft[gameState.color] <= 30000
                     ? 'text-red-600 bg-red-100 border-red-500'
                     : ''
                 }`}>
-                  {Math.floor(gameState.timeLeft[gameState.color] / 60000)}:
-                  {Math.floor((gameState.timeLeft[gameState.color] % 60000) / 1000)
-                    .toString().padStart(2, '0')}
+                  {gameState.isFriendlyGame ? '∞' : (
+                    <>
+                      {Math.floor(gameState.timeLeft[gameState.color] / 60000)}:
+                      {Math.floor((gameState.timeLeft[gameState.color] % 60000) / 1000)
+                        .toString().padStart(2, '0')}
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -210,6 +245,16 @@ export default function GameRoom() {
                     {gameState.status === 'active' ? 'En cours' : 'Terminée'}
                   </span>
                 </div>
+                
+                {/* Indicateur partie amicale */}
+                {gameState.isFriendlyGame && (
+                  <div>
+                    <span className="font-semibold text-gray-300">Mode:</span> 
+                    <span className="ml-2 px-2 py-1 rounded bg-blue-100 text-blue-800">
+                      🤝 Partie amicale (sans timer)
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -234,6 +279,27 @@ export default function GameRoom() {
                   >
                     Proposer partie nulle
                   </button>
+                  
+                  {/* Bouton partie amicale - seulement si ce n'est pas déjà une partie amicale */}
+                  {!gameState.isFriendlyGame && (
+                    <button
+                      className="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+                      onClick={() => {
+                        showDialog({
+                          title: '🤝 Proposer une partie amicale',
+                          message: 'Voulez-vous proposer de jouer sans timer ? Si votre adversaire accepte, le temps ne sera plus limité.',
+                          confirmText: 'Proposer',
+                          cancelText: 'Annuler',
+                          type: 'info'
+                        }, () => {
+                          offerFriendlyGame();
+                        });
+                      }}
+                    >
+                      🤝 Partie amicale
+                    </button>
+                  )}
+                  
                   <button
                     className="w-full bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
                     onClick={() => {
