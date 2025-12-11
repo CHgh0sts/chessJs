@@ -1,6 +1,6 @@
 const { Chess } = require('chess.js');
 
-// Valeurs des pièces pour l'évaluation
+// Valeurs des pièces pour l'évaluation (ajustées)
 const PIECE_VALUES = {
   'p': 100,   // Pion
   'n': 320,   // Cavalier
@@ -8,6 +8,16 @@ const PIECE_VALUES = {
   'r': 500,   // Tour
   'q': 900,   // Dame
   'k': 20000  // Roi
+};
+
+// Bonus pour les coups tactiques
+const TACTICAL_BONUS = {
+  CAPTURE: 50,
+  CHECK: 30,
+  CASTLE: 40,
+  PROMOTION: 800,
+  CENTER_CONTROL: 20,
+  PIECE_DEVELOPMENT: 15
 };
 
 // Tables de position pour encourager de bonnes positions
@@ -87,7 +97,7 @@ function squareToIndex(square) {
 // Cache pour les évaluations
 const evaluationCache = new Map();
 
-// Évaluer la position du plateau (optimisé)
+// Évaluer la position du plateau (amélioré)
 function evaluateBoard(chess) {
   const fen = chess.fen();
   
@@ -99,17 +109,17 @@ function evaluateBoard(chess) {
   let totalEvaluation = 0;
   const board = chess.board();
   
-  // Évaluation rapide basée sur le matériel principalement
+  // Évaluation du matériel et des positions
   for (let i = 0; i < 8; i++) {
     for (let j = 0; j < 8; j++) {
       const piece = board[i][j];
       if (piece) {
-        const index = i * 8 + j; // Calcul direct de l'index
+        const index = i * 8 + j;
         
         let pieceValue = PIECE_VALUES[piece.type];
         let positionValue = 0;
         
-        // Évaluation de position simplifiée pour la vitesse
+        // Évaluation de position selon le type de pièce
         switch (piece.type) {
           case 'p':
             positionValue = piece.color === 'w' ? PAWN_TABLE[index] : PAWN_TABLE[63 - index];
@@ -131,11 +141,24 @@ function evaluateBoard(chess) {
             break;
         }
         
-        const totalValue = pieceValue + positionValue * 0.5; // Réduire l'impact des positions pour la vitesse
+        const totalValue = pieceValue + positionValue;
         totalEvaluation += piece.color === 'w' ? totalValue : -totalValue;
       }
     }
   }
+  
+  // Facteurs tactiques additionnels
+  const moves = chess.moves();
+  totalEvaluation += moves.length * (chess.turn() === 'w' ? 2 : -2); // Mobilité
+  
+  // Pénalité pour être en échec
+  if (chess.inCheck()) {
+    totalEvaluation += chess.turn() === 'w' ? -50 : 50;
+  }
+  
+  // Bonus pour le contrôle du centre
+  const centerControl = evaluateCenterControl(chess);
+  totalEvaluation += centerControl;
   
   // Limiter la taille du cache
   if (evaluationCache.size > 1000) {
@@ -144,6 +167,21 @@ function evaluateBoard(chess) {
   
   evaluationCache.set(fen, totalEvaluation);
   return totalEvaluation;
+}
+
+// Évaluer le contrôle du centre
+function evaluateCenterControl(chess) {
+  let centerControl = 0;
+  const centerSquares = ['e4', 'e5', 'd4', 'd5'];
+  
+  for (const square of centerSquares) {
+    const piece = chess.get(square);
+    if (piece) {
+      centerControl += piece.color === 'w' ? 10 : -10;
+    }
+  }
+  
+  return centerControl;
 }
 
 // Algorithme Minimax optimisé avec élagage Alpha-Beta
@@ -186,39 +224,68 @@ function minimax(chess, depth, alpha, beta, maximizingPlayer) {
   }
 }
 
-// Ordonner les coups pour améliorer l'élagage Alpha-Beta
-function orderMoves(chess, moves) {
-  const orderedMoves = [];
-  const captures = [];
-  const others = [];
+// Évaluer la qualité d'un coup
+function evaluateMove(chess, move) {
+  const moveObj = chess.move(move);
+  let score = 0;
   
-  for (const move of moves) {
-    const moveObj = chess.move(move);
-    if (moveObj.captured) {
-      captures.push(move);
-    } else {
-      others.push(move);
-    }
-    chess.undo();
+  // Bonus pour les captures
+  if (moveObj.captured) {
+    score += PIECE_VALUES[moveObj.captured] + TACTICAL_BONUS.CAPTURE;
   }
   
-  // Prioriser les captures puis les autres coups
-  return [...captures, ...others];
+  // Bonus pour les échecs
+  if (chess.inCheck()) {
+    score += TACTICAL_BONUS.CHECK;
+  }
+  
+  // Bonus pour le roque
+  if (moveObj.flags.includes('k') || moveObj.flags.includes('q')) {
+    score += TACTICAL_BONUS.CASTLE;
+  }
+  
+  // Bonus pour la promotion
+  if (moveObj.promotion) {
+    score += TACTICAL_BONUS.PROMOTION;
+  }
+  
+  // Bonus pour le contrôle du centre (e4, e5, d4, d5)
+  const centerSquares = ['e4', 'e5', 'd4', 'd5'];
+  if (centerSquares.includes(moveObj.to)) {
+    score += TACTICAL_BONUS.CENTER_CONTROL;
+  }
+  
+  // Bonus pour le développement des pièces (sortir de la première rangée)
+  if (moveObj.piece !== 'p' && (moveObj.from[1] === '1' || moveObj.from[1] === '8')) {
+    score += TACTICAL_BONUS.PIECE_DEVELOPMENT;
+  }
+  
+  chess.undo();
+  return { move, score };
 }
 
-// Trouver le meilleur coup (optimisé pour la vitesse)
-function getBestMove(chess, depth = 3) { // Réduire la profondeur de 4 à 3
+// Ordonner les coups pour améliorer l'élagage Alpha-Beta
+function orderMoves(chess, moves) {
+  const evaluatedMoves = moves.map(move => evaluateMove(chess, move));
+  
+  // Trier par score décroissant
+  evaluatedMoves.sort((a, b) => b.score - a.score);
+  
+  return evaluatedMoves.map(item => item.move);
+}
+
+// Trouver le meilleur coup (amélioré)
+function getBestMove(chess, depth = 3) {
   const moves = chess.moves();
   if (moves.length === 0) return null;
   
-  // Retour rapide pour les premiers coups
-  if (moves.length > 20) {
-    // En début de partie, jouer des coups d'ouverture classiques
-    const goodOpeningMoves = ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6', 'd4', 'd5'];
-    for (const openingMove of goodOpeningMoves) {
-      if (moves.includes(openingMove)) {
-        return openingMove;
-      }
+  const moveCount = chess.history().length;
+  
+  // Livre d'ouverture amélioré
+  if (moveCount < 6) {
+    const openingBook = getOpeningMove(chess, moveCount);
+    if (openingBook && moves.includes(openingBook)) {
+      return openingBook;
     }
   }
   
@@ -229,8 +296,8 @@ function getBestMove(chess, depth = 3) { // Réduire la profondeur de 4 à 3
   // Ordonner les coups pour un meilleur élagage
   const orderedMoves = orderMoves(chess, moves);
   
-  // Limiter le nombre de coups évalués en fin de partie
-  const movesToEvaluate = orderedMoves.slice(0, Math.min(15, orderedMoves.length));
+  // Évaluer tous les coups importants
+  const movesToEvaluate = orderedMoves.slice(0, Math.min(20, orderedMoves.length));
   
   for (const move of movesToEvaluate) {
     chess.move(move);
@@ -243,7 +310,42 @@ function getBestMove(chess, depth = 3) { // Réduire la profondeur de 4 à 3
     }
   }
   
-  return bestMove || moves[0]; // Fallback au premier coup si aucun trouvé
+  return bestMove || moves[0];
+}
+
+// Livre d'ouverture intelligent
+function getOpeningMove(chess, moveCount) {
+  const history = chess.history();
+  
+  // Premier coup des blancs
+  if (moveCount === 0) {
+    return Math.random() < 0.6 ? 'e4' : 'd4'; // Favoriser e4
+  }
+  
+  // Réponses aux premiers coups des blancs
+  if (moveCount === 1) {
+    const lastMove = history[0];
+    if (lastMove === 'e4') return Math.random() < 0.5 ? 'e5' : 'c5';
+    if (lastMove === 'd4') return Math.random() < 0.5 ? 'd5' : 'Nf6';
+  }
+  
+  // Développement des pièces
+  if (moveCount < 6) {
+    const developmentMoves = ['Nf3', 'Nc3', 'Bc4', 'Bb5', 'Be2', 'Nf6', 'Nc6', 'Bc5', 'Be7'];
+    for (const move of developmentMoves) {
+      if (chess.moves().includes(move)) {
+        // Vérifier que le coup développe vraiment une pièce
+        const moveObj = chess.move(move);
+        const isDevelopment = moveObj.piece !== 'p' && 
+                            (moveObj.from[1] === '1' || moveObj.from[1] === '8' || 
+                             moveObj.from[1] === '2' || moveObj.from[1] === '7');
+        chess.undo();
+        if (isDevelopment) return move;
+      }
+    }
+  }
+  
+  return null;
 }
 
 // Créer un utilisateur bot

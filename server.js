@@ -443,7 +443,12 @@ app.prepare().then(() => {
             // Le bot doit jouer
             setTimeout(async () => {
               try {
-                const botMove = getBestMove(game.chess, 3); // Profondeur 3 pour un bot rapide mais fort
+                // Profondeur adaptative selon la situation
+                let depth = 3;
+                if (game.chess.inCheck() || game.chess.moves().length < 10) {
+                  depth = 4; // Plus de profondeur pour les situations critiques
+                }
+                const botMove = getBestMove(game.chess, depth);
                 if (botMove) {
                   console.log(`🤖 Bot joue: ${botMove}`);
                   
