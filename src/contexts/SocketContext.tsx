@@ -246,7 +246,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
           };
           
           // Effets sonores pour les mouvements
-          if (data.move) {
+          if (data.move && typeof data.move === 'string') {
             // Vérifier si c'est une capture (le coup contient 'x')
             if (data.move.includes('x')) {
               sounds.playCaptureSound();
@@ -258,6 +258,9 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
             if (data.move.includes('+')) {
               setTimeout(() => sounds.playCheckSound(), 200);
             }
+          } else {
+            // Fallback : jouer un son de mouvement simple si pas de détails
+            sounds.playMoveSound();
           }
           
           // Son "votre tour" si c'est maintenant au joueur de jouer

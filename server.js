@@ -379,7 +379,7 @@ app.prepare().then(() => {
 
           // Envoyer la mise à jour à tous les joueurs de la partie
           io.to(gameId).emit('moveMade', {
-            move: moveResult,
+            move: moveResult.san, // Utiliser la notation standard (ex: "Nf3", "exd5")
             fen: game.chess.fen(),
             currentPlayer: game.currentPlayer,
             status: gameStatus,
