@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useMemo } from 'react';
 
 interface SoundOptions {
   volume?: number;
@@ -79,7 +79,7 @@ export function useSound() {
     playSound('/sounds/game-end.mp3', { volume: 0.7 });
   }, [playSound]);
 
-  return {
+  return useMemo(() => ({
     playSound,
     playMoveSound,
     playCaptureSound,
@@ -87,5 +87,5 @@ export function useSound() {
     playYourTurnSound,
     playGameStartSound,
     playGameEndSound
-  };
+  }), [playSound, playMoveSound, playCaptureSound, playCheckSound, playYourTurnSound, playGameStartSound, playGameEndSound]);
 }

@@ -348,7 +348,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       setWaitingForOpponent(false);
       // Ne pas nettoyer gameState ici pour permettre la reconnexion
     };
-  }, [user, sounds]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   const findGame = () => {
     if (socket) {
