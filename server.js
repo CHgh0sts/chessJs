@@ -5,7 +5,7 @@ const { Chess } = require('chess.js');
 const { randomUUID } = require('crypto');
 // Base de données temporairement désactivée pour focus sur timer
 // const { createGame, getGameById, updateGame, getUserActiveGames } = require('./lib-server.js');
-const { getBestMove } = require('./chess-ai-server.js');
+const { getBestMove } = require('./chess-ai-fast.js');
 
 const dev = process.env.NODE_ENV !== 'production';
 const app = next({ dev });

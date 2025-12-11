@@ -1,5 +1,27 @@
 const { Chess } = require('chess.js');
 
+// Système d'apprentissage - Coups à éviter
+const badMoves = new Map(); // FEN -> Set de coups à éviter
+const goodMoves = new Map(); // FEN -> Set de bons coups
+
+// Fonction pour apprendre d'un mauvais coup
+function learnBadMove(fen, move) {
+  if (!badMoves.has(fen)) {
+    badMoves.set(fen, new Set());
+  }
+  badMoves.get(fen).add(move);
+  console.log(`🧠 Apprentissage: Éviter ${move} sur position ${fen.substring(0, 20)}...`);
+}
+
+// Fonction pour apprendre d'un bon coup
+function learnGoodMove(fen, move) {
+  if (!goodMoves.has(fen)) {
+    goodMoves.set(fen, new Set());
+  }
+  goodMoves.get(fen).add(move);
+  console.log(`✅ Apprentissage: Favoriser ${move} sur position ${fen.substring(0, 20)}...`);
+}
+
 // Valeurs des pièces pour l'évaluation (ajustées)
 const PIECE_VALUES = {
   'p': 100,   // Pion
@@ -474,10 +496,30 @@ function orderMoves(chess, moves) {
 }
 
 // Trouver le meilleur coup (évaluation intelligente des captures)
-function getBestMove(fen, depth = 3) {
+function getBestMove(fen, depth = 2) {
   const chess = new Chess(fen);
-  const moves = chess.moves();
+  let moves = chess.moves();
   if (moves.length === 0) return null;
+  
+  // Filtrer les coups appris comme mauvais
+  if (badMoves.has(fen)) {
+    const badMovesForPosition = badMoves.get(fen);
+    const originalCount = moves.length;
+    moves = moves.filter(move => !badMovesForPosition.has(move));
+    if (moves.length < originalCount) {
+      console.log(`🧠 ${originalCount - moves.length} coups évités grâce à l'apprentissage`);
+    }
+  }
+  
+  // Privilégier les coups appris comme bons
+  if (goodMoves.has(fen)) {
+    const goodMovesForPosition = goodMoves.get(fen);
+    const learnedGoodMoves = moves.filter(move => goodMovesForPosition.has(move));
+    if (learnedGoodMoves.length > 0) {
+      console.log(`✅ Coup appris favorisé: ${learnedGoodMoves[0]}`);
+      return learnedGoodMoves[0];
+    }
+  }
   
   // PRIORITÉ ABSOLUE : Si en échec, privilégier la fuite du roi
   if (chess.inCheck()) {
