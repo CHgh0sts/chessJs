@@ -71,9 +71,10 @@ async function createNewGame(player1, player2) {
       currentPlayer: 'white',
       status: 'active',
       lastMoveTime: Date.now(),
-      spectators: [],
-      isFriendlyGame: false
-    };
+    spectators: [],
+    isFriendlyGame: false,
+    botThinking: false
+  };
     
     games.set(gameId, game);
     console.log('🎮 Nouvelle partie créée en mémoire (fallback):', gameId);
@@ -91,11 +92,13 @@ function startGameTimer(game, io) {
     const now = Date.now();
     const timeDiff = now - game.lastMoveTime;
     
-    // Décrémenter le temps pour tous les joueurs (bot inclus)
-    if (game.currentPlayer === 'white') {
-      game.timeLeft.white -= timeDiff;
-    } else if (game.currentPlayer === 'black') {
-      game.timeLeft.black -= timeDiff;
+    // Décrémenter le temps seulement si le bot n'est pas en train de réfléchir
+    if (!game.botThinking) {
+      if (game.currentPlayer === 'white') {
+        game.timeLeft.white -= timeDiff;
+      } else if (game.currentPlayer === 'black') {
+        game.timeLeft.black -= timeDiff;
+      }
     }
     
     game.lastMoveTime = now;
@@ -336,6 +339,7 @@ app.prepare().then(() => {
             // Marquer la partie comme étant contre un bot
             game.isAgainstBot = true;
             game.botColor = 'black'; // Le bot joue les noirs
+            game.botThinking = false; // Initialiser le flag de réflexion
             
             // Joindre le joueur à la room
             socket.join(game.id);
@@ -440,7 +444,10 @@ app.prepare().then(() => {
           if (gameStatus === 'finished') {
             io.to(gameId).emit('gameOver', { winner, reason: winReason });
           } else if (game.isAgainstBot && game.currentPlayer === game.botColor) {
-            // Le bot doit jouer
+            // Le bot doit jouer - arrêter le timer pendant la réflexion
+            game.botThinking = true;
+            console.log('🤖 Bot commence à réfléchir - timer en pause');
+            
             setTimeout(async () => {
               try {
                 // Profondeur adaptative selon la situation
@@ -451,6 +458,11 @@ app.prepare().then(() => {
                 const botMove = getBestMove(game.chess, depth);
                 if (botMove) {
                   console.log(`🤖 Bot joue: ${botMove}`);
+                  
+                  // Remettre le timer en marche
+                  game.botThinking = false;
+                  game.lastMoveTime = Date.now(); // Réinitialiser le temps de référence
+                  console.log('🤖 Bot a joué - timer redémarré');
                   
                   const botMoveResult = game.chess.move(botMove);
                   if (botMoveResult) {
