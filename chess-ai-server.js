@@ -151,10 +151,14 @@ function evaluateBoard(chess) {
   const moves = chess.moves();
   totalEvaluation += moves.length * (chess.turn() === 'w' ? 2 : -2); // Mobilité
   
-  // Pénalité pour être en échec
+  // Pénalité ÉNORME pour être en échec
   if (chess.inCheck()) {
-    totalEvaluation += chess.turn() === 'w' ? -50 : 50;
+    totalEvaluation += chess.turn() === 'w' ? -200 : 200;
   }
+  
+  // Évaluation de la sécurité du roi
+  const kingSafety = evaluateKingSafety(chess);
+  totalEvaluation += kingSafety;
   
   // Bonus pour le contrôle du centre
   const centerControl = evaluateCenterControl(chess);
@@ -182,6 +186,62 @@ function evaluateCenterControl(chess) {
   }
   
   return centerControl;
+}
+
+// Évaluer la sécurité du roi
+function evaluateKingSafety(chess) {
+  let kingSafety = 0;
+  
+  // Trouver les positions des rois
+  const board = chess.board();
+  let whiteKingSquare = null;
+  let blackKingSquare = null;
+  
+  for (let i = 0; i < 8; i++) {
+    for (let j = 0; j < 8; j++) {
+      const piece = board[i][j];
+      if (piece && piece.type === 'k') {
+        const square = String.fromCharCode('a'.charCodeAt(0) + j) + (i + 1);
+        if (piece.color === 'w') {
+          whiteKingSquare = square;
+        } else {
+          blackKingSquare = square;
+        }
+      }
+    }
+  }
+  
+  // Évaluer la sécurité du roi blanc
+  if (whiteKingSquare) {
+    const whiteKingAttackers = getAttackers(chess, whiteKingSquare, 'b');
+    const whiteKingDefenders = getAttackers(chess, whiteKingSquare, 'w');
+    
+    // Pénalité pour chaque attaquant, bonus pour chaque défenseur
+    kingSafety -= whiteKingAttackers.length * 30;
+    kingSafety += whiteKingDefenders.length * 15;
+    
+    // Bonus si le roi est roqué (cases g1 ou c1)
+    if (whiteKingSquare === 'g1' || whiteKingSquare === 'c1') {
+      kingSafety += 50;
+    }
+  }
+  
+  // Évaluer la sécurité du roi noir
+  if (blackKingSquare) {
+    const blackKingAttackers = getAttackers(chess, blackKingSquare, 'w');
+    const blackKingDefenders = getAttackers(chess, blackKingSquare, 'b');
+    
+    // Pénalité pour chaque attaquant, bonus pour chaque défenseur
+    kingSafety += blackKingAttackers.length * 30;
+    kingSafety -= blackKingDefenders.length * 15;
+    
+    // Bonus si le roi est roqué (cases g8 ou c8)
+    if (blackKingSquare === 'g8' || blackKingSquare === 'c8') {
+      kingSafety -= 50;
+    }
+  }
+  
+  return kingSafety;
 }
 
 // Algorithme Minimax optimisé avec élagage Alpha-Beta
@@ -418,6 +478,16 @@ function getBestMove(chess, depth = 3) {
   const moves = chess.moves();
   if (moves.length === 0) return null;
   
+  // PRIORITÉ ABSOLUE : Si en échec, privilégier la fuite du roi
+  if (chess.inCheck()) {
+    const kingEscapes = findSafeKingMoves(chess, moves);
+    if (kingEscapes.length > 0) {
+      console.log(`👑 Roi en échec - fuite privilégiée: ${kingEscapes[0].move}`);
+      return kingEscapes[0].move;
+    }
+    console.log(`⚠️ Roi en échec - pas de fuite sûre, évaluation normale`);
+  }
+  
   // Vérifier s'il y a des captures VRAIMENT bonnes (gratuites ou très profitables)
   const goodCaptures = findGoodCaptures(chess, moves);
   if (goodCaptures.length > 0) {
@@ -562,7 +632,53 @@ function getAttackers(chess, square, color) {
   return attackers;
 }
 
-// Fonction supprimée - remplacée par getAttackers() plus précise
+// Trouver les mouvements sûrs du roi quand il est en échec
+function findSafeKingMoves(chess, moves) {
+  const safeKingMoves = [];
+  const myColor = chess.turn();
+  const enemyColor = myColor === 'w' ? 'b' : 'w';
+  
+  for (const move of moves) {
+    const moveObj = chess.move(move);
+    
+    // Vérifier si c'est un mouvement du roi
+    if (moveObj.piece === 'k') {
+      // Vérifier si le roi sera en sécurité sur cette case
+      const isStillInCheck = chess.inCheck();
+      
+      if (!isStillInCheck) {
+        // Vérifier si la case de destination est attaquée
+        const attackersOnDestination = getAttackers(chess, moveObj.to, enemyColor);
+        
+        if (attackersOnDestination.length === 0) {
+          // Case complètement sûre
+          safeKingMoves.push({
+            move: move,
+            safety: 'safe',
+            score: 1000 // Score très élevé pour la sécurité du roi
+          });
+        } else {
+          // Case attaquée mais pas en échec (peut-être défendue)
+          const defenders = getAttackers(chess, moveObj.to, myColor);
+          if (defenders.length > 0) {
+            safeKingMoves.push({
+              move: move,
+              safety: 'defended',
+              score: 500 // Score moyen pour case défendue
+            });
+          }
+        }
+      }
+    }
+    
+    chess.undo();
+  }
+  
+  // Trier par sécurité (cases sûres en premier)
+  safeKingMoves.sort((a, b) => b.score - a.score);
+  
+  return safeKingMoves;
+}
 
 // Livre d'ouverture intelligent
 function getOpeningMove(chess, moveCount) {
