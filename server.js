@@ -91,23 +91,23 @@ function startGameTimer(game, io) {
     const now = Date.now();
     const timeDiff = now - game.lastMoveTime;
     
-    // Ne pas décrémenter le temps du bot
-    if (game.currentPlayer === 'white' && !(game.isAgainstBot && game.botColor === 'white')) {
+    // Décrémenter le temps pour tous les joueurs (bot inclus)
+    if (game.currentPlayer === 'white') {
       game.timeLeft.white -= timeDiff;
-    } else if (game.currentPlayer === 'black' && !(game.isAgainstBot && game.botColor === 'black')) {
+    } else if (game.currentPlayer === 'black') {
       game.timeLeft.black -= timeDiff;
     }
     
     game.lastMoveTime = now;
     
-    // Vérifier si le temps est écoulé (seulement pour les joueurs humains)
-    if (game.timeLeft.white <= 0 && !(game.isAgainstBot && game.botColor === 'white')) {
+    // Vérifier si le temps est écoulé (pour tous les joueurs)
+    if (game.timeLeft.white <= 0) {
       game.status = 'finished';
       game.winner = 'black';
       game.winReason = 'timeout';
       io.to(game.id).emit('gameOver', { winner: 'black', reason: 'timeout' });
       clearInterval(timer);
-    } else if (game.timeLeft.black <= 0 && !(game.isAgainstBot && game.botColor === 'black')) {
+    } else if (game.timeLeft.black <= 0) {
       game.status = 'finished';
       game.winner = 'white';
       game.winReason = 'timeout';

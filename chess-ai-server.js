@@ -292,7 +292,7 @@ function evaluateMoveSafety(chess, moveObj) {
         // Pièce non défendue et attaquée par une pièce moins chère = TRÈS DANGEREUX
         safetyScore -= pieceValue * 0.8;
         evaluation.pieceInDanger = true;
-        // console.log(`⚠️ DANGER: ${moveObj.piece} sur ${moveObj.to} peut être pris par ${cheapestAttacker} (perte: -${pieceValue * 0.8})`);
+        // Danger détecté mais pas de log pour éviter le spam
       } else {
         // Pièce défendue mais échange défavorable possible
         const cheapestDefender = Math.min(...defenders);
