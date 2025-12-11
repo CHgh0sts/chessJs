@@ -72,7 +72,8 @@ async function createNewGame(player1, player2) {
       status: 'active',
       lastMoveTime: Date.now(),
     spectators: [],
-    isFriendlyGame: false
+    isFriendlyGame: false,
+    timerActive: true
   };
     
     games.set(gameId, game);
@@ -88,19 +89,16 @@ function startGameTimer(game, io) {
       return;
     }
     
-    const now = Date.now();
-    const rawTimeDiff = now - game.lastMoveTime;
-    // Limiter le timeDiff à maximum 1100ms pour éviter les gros sauts
-    const timeDiff = Math.min(rawTimeDiff, 1100);
-    
-    // Décrémenter le temps pour tous les joueurs (bot inclus)
-    if (game.currentPlayer === 'white') {
-      game.timeLeft.white -= timeDiff;
-    } else if (game.currentPlayer === 'black') {
-      game.timeLeft.black -= timeDiff;
+    // Décrémenter seulement si le timer est actif
+    if (game.timerActive) {
+      const timeDiff = 1000; // Décompte fixe de 1 seconde
+      
+      if (game.currentPlayer === 'white') {
+        game.timeLeft.white -= timeDiff;
+      } else if (game.currentPlayer === 'black') {
+        game.timeLeft.black -= timeDiff;
+      }
     }
-    
-    game.lastMoveTime = now;
     
     // Vérifier si le temps est écoulé (pour tous les joueurs)
     if (game.timeLeft.white <= 0) {
@@ -388,6 +386,7 @@ app.prepare().then(() => {
           // Mettre à jour le temps
           game.lastMoveTime = Date.now();
           game.currentPlayer = game.currentPlayer === 'white' ? 'black' : 'white';
+          game.timerActive = true; // S'assurer que le timer est actif après un coup humain
 
           // Sauvegarder le coup en base de données
           if (game.dbGame) {
@@ -442,8 +441,9 @@ app.prepare().then(() => {
           if (gameStatus === 'finished') {
             io.to(gameId).emit('gameOver', { winner, reason: winReason });
           } else if (game.isAgainstBot && game.currentPlayer === game.botColor) {
-            // Le bot doit jouer - mettre à jour le temps de référence
-            game.lastMoveTime = Date.now();
+            // Le bot doit jouer - désactiver le timer pendant la réflexion
+            game.timerActive = false;
+            console.log('🤖 Bot réfléchit - timer désactivé');
             
             setTimeout(async () => {
               try {
@@ -458,9 +458,10 @@ app.prepare().then(() => {
                   
                   const botMoveResult = game.chess.move(botMove);
                   if (botMoveResult) {
-                    // Changer le joueur actuel et réinitialiser le timer
+                    // Changer le joueur actuel et réactiver le timer
                     game.currentPlayer = game.chess.turn() === 'w' ? 'white' : 'black';
-                    game.lastMoveTime = Date.now(); // Important : réinitialiser le temps de référence
+                    game.timerActive = true; // Réactiver le timer
+                    console.log('🤖 Bot a joué - timer réactivé');
                     
                     // Vérifier l'état du jeu
                     let botGameStatus = 'active';
