@@ -440,7 +440,9 @@ app.prepare().then(() => {
           if (gameStatus === 'finished') {
             io.to(gameId).emit('gameOver', { winner, reason: winReason });
           } else if (game.isAgainstBot && game.currentPlayer === game.botColor) {
-            // Le bot doit jouer
+            // Le bot doit jouer - mettre à jour le temps de référence
+            game.lastMoveTime = Date.now();
+            
             setTimeout(async () => {
               try {
                 // Profondeur adaptative selon la situation
@@ -454,9 +456,9 @@ app.prepare().then(() => {
                   
                   const botMoveResult = game.chess.move(botMove);
                   if (botMoveResult) {
-                    // Changer le joueur actuel
+                    // Changer le joueur actuel et réinitialiser le timer
                     game.currentPlayer = game.chess.turn() === 'w' ? 'white' : 'black';
-                    game.lastMoveTime = Date.now();
+                    game.lastMoveTime = Date.now(); // Important : réinitialiser le temps de référence
                     
                     // Vérifier l'état du jeu
                     let botGameStatus = 'active';
