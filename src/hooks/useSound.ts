@@ -54,29 +54,29 @@ export function useSound() {
     }
   }, []);
 
-  // Sons prédéfinis pour le jeu d'échecs
+  // Sons prédéfinis pour le jeu d'échecs - variations du même fichier
   const playMoveSound = useCallback(() => {
-    playSound('/sounds/move.mp3', { volume: 0.6 });
+    playSound('/sounds/move.mp3', { volume: 0.4, playbackRate: 1.0 });
   }, [playSound]);
 
   const playCaptureSound = useCallback(() => {
-    playSound('/sounds/capture.mp3', { volume: 0.7 });
+    playSound('/sounds/capture.mp3', { volume: 0.6, playbackRate: 0.8 }); // Plus grave et fort
   }, [playSound]);
 
   const playCheckSound = useCallback(() => {
-    playSound('/sounds/check.mp3', { volume: 0.8 });
+    playSound('/sounds/check.mp3', { volume: 0.7, playbackRate: 1.2 }); // Plus aigu et fort
   }, [playSound]);
 
   const playYourTurnSound = useCallback(() => {
-    playSound('/sounds/your-turn.mp3', { volume: 0.5 });
+    playSound('/sounds/your-turn.mp3', { volume: 0.3, playbackRate: 1.1 }); // Plus doux et aigu
   }, [playSound]);
 
   const playGameStartSound = useCallback(() => {
-    playSound('/sounds/game-start.mp3', { volume: 0.6 });
+    playSound('/sounds/game-start.mp3', { volume: 0.5, playbackRate: 0.9 }); // Légèrement plus grave
   }, [playSound]);
 
   const playGameEndSound = useCallback(() => {
-    playSound('/sounds/game-end.mp3', { volume: 0.7 });
+    playSound('/sounds/game-end.mp3', { volume: 0.6, playbackRate: 0.7 }); // Plus grave et dramatique
   }, [playSound]);
 
   return useMemo(() => ({
