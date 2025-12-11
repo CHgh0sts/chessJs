@@ -179,6 +179,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       });
 
       newSocket.on('gameFound', (data) => {
+        console.log('🎮 Partie trouvée - arrêt de l\'animation');
         setWaitingForOpponent(false);
         setGameState({
           gameId: data.gameId,
@@ -357,6 +358,14 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   const findGame = () => {
     if (socket && user) {
       console.log('🔍 Envoi findGame avec utilisateur:', user.username);
+      setWaitingForOpponent(true); // Activer l'animation immédiatement
+      
+      // Timeout de sécurité pour désactiver l'animation après 15 secondes
+      setTimeout(() => {
+        setWaitingForOpponent(false);
+        console.log('⏰ Timeout recherche de partie - animation désactivée');
+      }, 15000);
+      
       socket.emit('findGame', {
         username: user.username,
         rating: user.rating,
