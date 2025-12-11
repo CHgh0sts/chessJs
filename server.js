@@ -288,7 +288,6 @@ app.prepare().then(() => {
               }
             })();
           }
-          }
         }
       } catch (error) {
         console.error('❌ Erreur coup:', error);
