@@ -242,13 +242,24 @@ app.prepare().then(() => {
           
           // Si c'est contre le bot et c'est son tour
           if (game.isAgainstBot && game.currentPlayer === game.botColor) {
+            // Délai adaptatif : plus court en début de partie, plus long en fin
+            const moveCount = game.chess.history().length;
+            const baseDelay = moveCount < 10 ? 300 : moveCount < 20 ? 500 : 800;
+            const randomDelay = Math.random() * 400 + baseDelay; // 300-700ms début, 500-900ms milieu, 800-1200ms fin
+            
             setTimeout(async () => {
               try {
+                console.log('🤖 Bot réfléchit...');
+                const startTime = Date.now();
                 const botMove = await getBestMove(game.chess.fen());
+                const thinkTime = Date.now() - startTime;
+                console.log(`🧠 Bot a réfléchi ${thinkTime}ms`);
+                
                 if (botMove) {
                   const botMoveResult = game.chess.move(botMove);
                   if (botMoveResult) {
                     game.currentPlayer = game.chess.turn() === 'w' ? 'white' : 'black';
+                    console.log(`🤖 Bot joue: ${botMoveResult.san}`);
                     
                     io.to(game.id).emit('moveMade', {
                       move: botMoveResult.san,
@@ -279,7 +290,8 @@ app.prepare().then(() => {
               } catch (error) {
                 console.error('❌ Erreur bot:', error);
               }
-            }, Math.random() * 2000 + 1000); // 1-3 secondes
+            }, randomDelay);
+          }
           }
         }
       } catch (error) {
