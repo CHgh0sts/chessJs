@@ -4,6 +4,21 @@ const { Chess } = require('chess.js');
 const badMoves = new Map(); // FEN -> Set de coups à éviter
 const goodMoves = new Map(); // FEN -> Set de bons coups
 
+// Personnalités du bot pour varier le style
+const personalities = ['aggressive', 'positional', 'creative', 'solid'];
+let currentPersonality = personalities[Math.floor(Math.random() * personalities.length)];
+
+// Changer de personnalité de temps en temps
+function maybeChangePersonality() {
+  if (Math.random() < 0.1) { // 10% de chance de changer
+    const oldPersonality = currentPersonality;
+    currentPersonality = personalities[Math.floor(Math.random() * personalities.length)];
+    if (oldPersonality !== currentPersonality) {
+      console.log(`🎭 Bot change de style: ${oldPersonality} → ${currentPersonality}`);
+    }
+  }
+}
+
 // Fonction pour apprendre d'un mauvais coup
 function learnBadMove(fen, move) {
   if (!badMoves.has(fen)) {
@@ -33,7 +48,8 @@ function getBestMove(fen) {
   let moves = chess.moves();
   if (moves.length === 0) return null;
   
-  console.log(`🚀 Bot rapide évalue ${moves.length} coups`);
+  console.log(`🚀 Bot rapide évalue ${moves.length} coups (style: ${currentPersonality})`);
+  maybeChangePersonality();
   
   // Filtrer les coups appris comme mauvais
   if (badMoves.has(fen)) {
@@ -64,7 +80,7 @@ function getBestMove(fen) {
     }
   }
   
-  // 2. Captures profitables
+  // 2. Captures selon la personnalité
   const captures = [];
   for (const move of moves) {
     const testChess = new Chess(chess.fen());
@@ -74,50 +90,88 @@ function getBestMove(fen) {
       const movingPiece = result.piece;
       const movingValue = PIECE_VALUES[movingPiece] || 0;
       
-      // Capture profitable si on prend plus qu'on risque
-      if (capturedValue >= movingValue) {
+      // Logique selon personnalité
+      let shouldCapture = false;
+      if (currentPersonality === 'aggressive') {
+        shouldCapture = capturedValue > 0; // Capture tout
+      } else if (currentPersonality === 'creative') {
+        shouldCapture = Math.random() > 0.3; // 70% des captures
+      } else {
+        shouldCapture = capturedValue >= movingValue; // Captures profitables
+      }
+      
+      if (shouldCapture) {
         captures.push({ move, value: capturedValue });
       }
     }
   }
   
   if (captures.length > 0) {
-    // Prendre la capture la plus profitable
     captures.sort((a, b) => b.value - a.value);
-    console.log(`🎯 Bot capture: ${captures[0].move} (valeur: ${captures[0].value})`);
-    return captures[0].move;
+    const captureChoice = currentPersonality === 'creative' ? 
+      captures[Math.floor(Math.random() * Math.min(captures.length, 2))] : // Choix créatif
+      captures[0]; // Meilleure capture
+    console.log(`🎯 Bot capture (${currentPersonality}): ${captureChoice.move} (valeur: ${captureChoice.value})`);
+    return captureChoice.move;
   }
   
-  // 3. Développement en début de partie
+  // 3. Développement varié en début de partie
   const moveCount = chess.history().length;
-  if (moveCount < 10) {
-    const developmentMoves = moves.filter(move => 
-      move.includes('N') || move.includes('B') || 
-      move.includes('e4') || move.includes('d4') || 
-      move.includes('e5') || move.includes('d5')
-    );
+  if (moveCount < 12) {
+    // Ouvertures variées selon le coup
+    let openingMoves = [];
     
-    if (developmentMoves.length > 0) {
-      const devMove = developmentMoves[0];
-      console.log(`🏗️ Bot développe: ${devMove}`);
+    if (moveCount < 3) {
+      // Premiers coups très variés
+      openingMoves = moves.filter(move => 
+        move.includes('e4') || move.includes('d4') || move.includes('Nf3') || 
+        move.includes('c4') || move.includes('g3') || move.includes('b3') ||
+        move.includes('e5') || move.includes('d5') || move.includes('Nf6') ||
+        move.includes('c5') || move.includes('g6') || move.includes('b6')
+      );
+    } else if (moveCount < 8) {
+      // Développement créatif
+      openingMoves = moves.filter(move => 
+        move.includes('N') || move.includes('B') || move.includes('O-O') ||
+        move.includes('c') || move.includes('f') || move.includes('g') ||
+        move.includes('h3') || move.includes('h6') || move.includes('a3') || move.includes('a6')
+      );
+    } else {
+      // Milieu d'ouverture
+      openingMoves = moves.filter(move => 
+        move.includes('Q') || move.includes('R') || move.includes('O-O') ||
+        move.includes('c') || move.includes('f') || move.includes('e') || move.includes('d')
+      );
+    }
+    
+    if (openingMoves.length > 0) {
+      // Choisir aléatoirement parmi les bons coups d'ouverture
+      const randomIndex = Math.floor(Math.random() * Math.min(openingMoves.length, 3));
+      const devMove = openingMoves[randomIndex];
+      console.log(`🎨 Bot varie (${moveCount}e coup): ${devMove}`);
       return devMove;
     }
   }
   
-  // 4. Coups centraux
-  const centralMoves = moves.filter(move => 
-    move.includes('e') || move.includes('d')
+  // 4. Coups tactiques variés
+  const tacticalMoves = moves.filter(move => 
+    move.includes('+') || move.includes('x') || // Échecs et captures
+    move.includes('O-O') || move.includes('=') || // Roques et promotions
+    move.includes('e') || move.includes('d') || move.includes('f') || move.includes('c') // Coups centraux
   );
   
-  if (centralMoves.length > 0) {
-    const centralMove = centralMoves[0];
-    console.log(`🎯 Bot joue central: ${centralMove}`);
-    return centralMove;
+  if (tacticalMoves.length > 0) {
+    // Choisir parmi les 3 premiers coups tactiques
+    const randomIndex = Math.floor(Math.random() * Math.min(tacticalMoves.length, 3));
+    const tacticalMove = tacticalMoves[randomIndex];
+    console.log(`⚡ Bot joue tactique: ${tacticalMove}`);
+    return tacticalMove;
   }
   
-  // 5. Coup aléatoire
-  const randomMove = moves[Math.floor(Math.random() * moves.length)];
-  console.log(`🎲 Bot joue: ${randomMove}`);
+  // 5. Coup créatif aléatoire (parmi les meilleurs)
+  const creativeMoves = moves.slice(0, Math.min(moves.length, 5)); // Top 5 coups
+  const randomMove = creativeMoves[Math.floor(Math.random() * creativeMoves.length)];
+  console.log(`🎨 Bot créatif: ${randomMove}`);
   return randomMove;
 }
 
