@@ -10,9 +10,9 @@ const PIECE_VALUES = {
   'k': 20000  // Roi
 };
 
-// Bonus pour les coups tactiques
+// Bonus pour les coups tactiques (captures prioritaires)
 const TACTICAL_BONUS = {
-  CAPTURE: 50,
+  CAPTURE: 500,  // ÉNORME bonus pour les captures
   CHECK: 30,
   CASTLE: 40,
   PROMOTION: 800,
@@ -229,9 +229,10 @@ function evaluateMove(chess, move) {
   const moveObj = chess.move(move);
   let score = 0;
   
-  // Bonus pour les captures
+  // Bonus ÉNORME pour les captures
   if (moveObj.captured) {
-    score += PIECE_VALUES[moveObj.captured] + TACTICAL_BONUS.CAPTURE;
+    score += PIECE_VALUES[moveObj.captured] * 2 + TACTICAL_BONUS.CAPTURE;
+    console.log(`🎯 Évaluation capture ${move}: +${PIECE_VALUES[moveObj.captured] * 2 + TACTICAL_BONUS.CAPTURE} points`);
   }
   
   // Bonus pour les échecs
@@ -274,14 +275,28 @@ function orderMoves(chess, moves) {
   return evaluatedMoves.map(item => item.move);
 }
 
-// Trouver le meilleur coup (amélioré)
+// Trouver le meilleur coup (amélioré avec priorité captures)
 function getBestMove(chess, depth = 3) {
   const moves = chess.moves();
   if (moves.length === 0) return null;
   
+  // PRIORITÉ ABSOLUE : Vérifier les captures gratuites d'abord
+  const captures = findCaptures(chess, moves);
+  if (captures.length > 0) {
+    console.log(`🎯 Bot trouve ${captures.length} capture(s) possible(s):`, captures.map(c => c.move));
+    
+    // Prendre la meilleure capture (pièce la plus valuable)
+    const bestCapture = captures.reduce((best, current) => 
+      current.value > best.value ? current : best
+    );
+    
+    console.log(`🎯 Bot choisit la capture: ${bestCapture.move} (valeur: ${bestCapture.value})`);
+    return bestCapture.move;
+  }
+  
   const moveCount = chess.history().length;
   
-  // Livre d'ouverture amélioré
+  // Livre d'ouverture seulement si pas de captures
   if (moveCount < 6) {
     const openingBook = getOpeningMove(chess, moveCount);
     if (openingBook && moves.includes(openingBook)) {
@@ -311,6 +326,45 @@ function getBestMove(chess, depth = 3) {
   }
   
   return bestMove || moves[0];
+}
+
+// Trouver toutes les captures possibles avec leur valeur
+function findCaptures(chess, moves) {
+  const captures = [];
+  
+  for (const move of moves) {
+    const moveObj = chess.move(move);
+    if (moveObj.captured) {
+      const captureValue = PIECE_VALUES[moveObj.captured];
+      const attackerValue = PIECE_VALUES[moveObj.piece];
+      
+      // Vérifier si la capture est sûre (pas de contre-attaque immédiate)
+      const isSafe = !isSquareAttacked(chess, moveObj.to, moveObj.color === 'w' ? 'b' : 'w');
+      
+      captures.push({
+        move: move,
+        captured: moveObj.captured,
+        value: captureValue,
+        attackerValue: attackerValue,
+        isSafe: isSafe,
+        // Score final : valeur capturée + bonus sécurité
+        finalScore: captureValue + (isSafe ? 100 : -attackerValue * 0.5)
+      });
+    }
+    chess.undo();
+  }
+  
+  // Trier par score final décroissant
+  captures.sort((a, b) => b.finalScore - a.finalScore);
+  
+  return captures;
+}
+
+// Vérifier si une case est attaquée par une couleur
+function isSquareAttacked(chess, square, byColor) {
+  const moves = chess.moves({ verbose: true });
+  return moves.some(move => move.to === square && 
+    chess.get(move.from) && chess.get(move.from).color === byColor);
 }
 
 // Livre d'ouverture intelligent
