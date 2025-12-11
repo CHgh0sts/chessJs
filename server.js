@@ -242,12 +242,8 @@ app.prepare().then(() => {
           
           // Si c'est contre le bot et c'est son tour
           if (game.isAgainstBot && game.currentPlayer === game.botColor) {
-            // Délai adaptatif : plus court en début de partie, plus long en fin
-            const moveCount = game.chess.history().length;
-            const baseDelay = moveCount < 10 ? 300 : moveCount < 20 ? 500 : 800;
-            const randomDelay = Math.random() * 400 + baseDelay; // 300-700ms début, 500-900ms milieu, 800-1200ms fin
-            
-            setTimeout(async () => {
+            // Pas de délai artificiel - le bot joue dès qu'il trouve le meilleur coup
+            (async () => {
               try {
                 console.log('🤖 Bot réfléchit...');
                 const startTime = Date.now();
@@ -290,7 +286,7 @@ app.prepare().then(() => {
               } catch (error) {
                 console.error('❌ Erreur bot:', error);
               }
-            }, randomDelay);
+            })();
           }
           }
         }
