@@ -224,7 +224,7 @@ function minimax(chess, depth, alpha, beta, maximizingPlayer) {
   }
 }
 
-// Évaluer la qualité d'un coup
+// Évaluer la qualité d'un coup avec sécurité
 function evaluateMove(chess, move) {
   const moveObj = chess.move(move);
   let score = 0;
@@ -260,8 +260,147 @@ function evaluateMove(chess, move) {
     score += TACTICAL_BONUS.PIECE_DEVELOPMENT;
   }
   
+  // ÉVALUATION DE SÉCURITÉ CRITIQUE
+  const safetyEvaluation = evaluateMoveSafety(chess, moveObj);
+  score += safetyEvaluation.score;
+  
   chess.undo();
-  return { move, score };
+  return { move, score, safety: safetyEvaluation };
+}
+
+// Évaluer la sécurité d'un coup
+function evaluateMoveSafety(chess, moveObj) {
+  let safetyScore = 0;
+  const evaluation = {
+    pieceInDanger: false,
+    exposedPieces: [],
+    score: 0
+  };
+  
+  // 1. Vérifier si la pièce bougée sera en danger sur sa nouvelle case
+  const enemyColor = moveObj.color === 'w' ? 'b' : 'w';
+  const attackersOnDestination = getAttackers(chess, moveObj.to, enemyColor);
+  
+  if (attackersOnDestination.length > 0) {
+    const pieceValue = PIECE_VALUES[moveObj.piece];
+    const cheapestAttacker = Math.min(...attackersOnDestination);
+    
+    // Si la pièce peut être prise par une pièce moins chère, c'est dangereux
+    if (cheapestAttacker < pieceValue) {
+      const defenders = getAttackers(chess, moveObj.to, moveObj.color);
+      if (defenders.length === 0) {
+        // Pièce non défendue et attaquée par une pièce moins chère = TRÈS DANGEREUX
+        safetyScore -= pieceValue * 0.8;
+        evaluation.pieceInDanger = true;
+        console.log(`⚠️ DANGER: ${moveObj.piece} sur ${moveObj.to} peut être pris par ${cheapestAttacker} (perte: -${pieceValue * 0.8})`);
+      } else {
+        // Pièce défendue mais échange défavorable possible
+        const cheapestDefender = Math.min(...defenders);
+        if (cheapestAttacker < cheapestDefender) {
+          safetyScore -= (pieceValue - cheapestAttacker) * 0.3;
+          console.log(`⚠️ Échange défavorable possible sur ${moveObj.to}`);
+        }
+      }
+    }
+  }
+  
+  // 2. Vérifier si bouger cette pièce expose d'autres pièces importantes
+  const exposedPieces = findExposedPieces(chess, moveObj);
+  for (const exposed of exposedPieces) {
+    safetyScore -= exposed.value * 0.6;
+    evaluation.exposedPieces.push(exposed);
+    console.log(`⚠️ EXPOSITION: Bouger ${moveObj.piece} expose ${exposed.piece} sur ${exposed.square} (perte: -${exposed.value * 0.6})`);
+  }
+  
+  evaluation.score = safetyScore;
+  return evaluation;
+}
+
+// Trouver les pièces exposées après un mouvement
+function findExposedPieces(chess, moveObj) {
+  const exposedPieces = [];
+  const myColor = moveObj.color;
+  const enemyColor = myColor === 'w' ? 'b' : 'w';
+  
+  // Vérifier les lignes, colonnes et diagonales depuis la case d'origine
+  const directions = [
+    [0, 1], [0, -1], [1, 0], [-1, 0], // Lignes et colonnes
+    [1, 1], [1, -1], [-1, 1], [-1, -1] // Diagonales
+  ];
+  
+  for (const [dx, dy] of directions) {
+    const ray = getRayFromSquare(chess, moveObj.from, dx, dy, myColor);
+    if (ray.friendlyPiece && ray.enemyAttacker) {
+      // Une pièce amie est sur la ligne et un attaqueur ennemi peut l'atteindre
+      const friendlyValue = PIECE_VALUES[ray.friendlyPiece.type];
+      const attackerValue = PIECE_VALUES[ray.enemyAttacker.type];
+      
+      // Si l'attaqueur est moins cher que la pièce exposée, c'est un problème
+      if (attackerValue <= friendlyValue) {
+        exposedPieces.push({
+          piece: ray.friendlyPiece.type,
+          square: ray.friendlySquare,
+          value: friendlyValue,
+          attacker: ray.enemyAttacker.type
+        });
+      }
+    }
+  }
+  
+  return exposedPieces;
+}
+
+// Analyser un rayon depuis une case dans une direction
+function getRayFromSquare(chess, fromSquare, dx, dy, myColor) {
+  const files = 'abcdefgh';
+  const fromFile = files.indexOf(fromSquare[0]);
+  const fromRank = parseInt(fromSquare[1]) - 1;
+  
+  let friendlyPiece = null;
+  let friendlySquare = null;
+  let enemyAttacker = null;
+  
+  // Parcourir le rayon
+  for (let i = 1; i < 8; i++) {
+    const newFile = fromFile + dx * i;
+    const newRank = fromRank + dy * i;
+    
+    if (newFile < 0 || newFile > 7 || newRank < 0 || newRank > 7) break;
+    
+    const square = files[newFile] + (newRank + 1);
+    const piece = chess.get(square);
+    
+    if (piece) {
+      if (piece.color === myColor && !friendlyPiece) {
+        friendlyPiece = piece;
+        friendlySquare = square;
+      } else if (piece.color !== myColor && friendlyPiece && !enemyAttacker) {
+        // Vérifier si cette pièce ennemie peut attaquer dans cette direction
+        if (canPieceAttackInDirection(piece.type, dx, dy)) {
+          enemyAttacker = piece;
+        }
+        break;
+      } else {
+        break; // Pièce bloque le rayon
+      }
+    }
+  }
+  
+  return { friendlyPiece, friendlySquare, enemyAttacker };
+}
+
+// Vérifier si une pièce peut attaquer dans une direction donnée
+function canPieceAttackInDirection(pieceType, dx, dy) {
+  switch (pieceType) {
+    case 'r': // Tour
+      return dx === 0 || dy === 0;
+    case 'b': // Fou
+      return Math.abs(dx) === Math.abs(dy);
+    case 'q': // Dame
+      return dx === 0 || dy === 0 || Math.abs(dx) === Math.abs(dy);
+    default:
+      return false;
+  }
 }
 
 // Ordonner les coups pour améliorer l'élagage Alpha-Beta
@@ -307,8 +446,23 @@ function getBestMove(chess, depth = 3) {
   // Ordonner les coups pour un meilleur élagage
   const orderedMoves = orderMoves(chess, moves);
   
-  // Évaluer tous les coups importants
-  const movesToEvaluate = orderedMoves.slice(0, Math.min(20, orderedMoves.length));
+  // Filtrer les coups trop dangereux
+  const safeMoves = orderedMoves.filter(move => {
+    const moveEval = evaluateMove(chess, move);
+    // Rejeter les coups avec une perte de sécurité > 200 points
+    if (moveEval.safety.score < -200) {
+      console.log(`❌ Coup ${move} rejeté: trop dangereux (${moveEval.safety.score})`);
+      return false;
+    }
+    return true;
+  });
+  
+  // Si tous les coups sont dangereux, garder les moins dangereux
+  const movesToEvaluate = safeMoves.length > 0 ? 
+    safeMoves.slice(0, Math.min(20, safeMoves.length)) :
+    orderedMoves.slice(0, Math.min(5, orderedMoves.length)); // Seulement les 5 meilleurs si tous dangereux
+  
+  console.log(`🎯 Évaluation de ${movesToEvaluate.length} coups sûrs sur ${moves.length} possibles`);
   
   for (const move of movesToEvaluate) {
     chess.move(move);
