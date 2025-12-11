@@ -474,7 +474,8 @@ function orderMoves(chess, moves) {
 }
 
 // Trouver le meilleur coup (évaluation intelligente des captures)
-function getBestMove(chess, depth = 3) {
+function getBestMove(fen, depth = 3) {
+  const chess = new Chess(fen);
   const moves = chess.moves();
   if (moves.length === 0) return null;
   
