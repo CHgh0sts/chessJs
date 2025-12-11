@@ -115,6 +115,8 @@ export async function updateGame(
     result: updatedGame.result || undefined,
     timeControl: updatedGame.timeControl,
     timeLeft: updatedGame.timeLeft,
+    currentPlayer: updatedGame.currentPlayer,
+    lastMoveTime: updatedGame.lastMoveTime || undefined,
     startedAt: updatedGame.startedAt,
     endedAt: updatedGame.endedAt || undefined,
   };
@@ -216,6 +218,8 @@ export async function getUserGames(
     result: game.result || undefined,
     timeControl: game.timeControl,
     timeLeft: game.timeLeft,
+    currentPlayer: game.currentPlayer,
+    lastMoveTime: game.lastMoveTime || undefined,
     startedAt: game.startedAt,
     endedAt: game.endedAt || undefined,
   }));
@@ -250,6 +254,8 @@ export async function getUserActiveGames(userId: string): Promise<GameData[]> {
     result: game.result || undefined,
     timeControl: game.timeControl,
     timeLeft: game.timeLeft,
+    currentPlayer: game.currentPlayer,
+    lastMoveTime: game.lastMoveTime || undefined,
     startedAt: game.startedAt,
     endedAt: game.endedAt || undefined,
   }));

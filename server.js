@@ -5,7 +5,7 @@ const { Server } = require('socket.io');
 const { Chess } = require('chess.js');
 
 // Import des fonctions de persistance
-const { createGame, getGameById, updateGame, getUserActiveGames } = require('./src/lib/game-server.js');
+const { createGame, getGameById, updateGame, getUserActiveGames } = require('./lib-server.js');
 
 const dev = process.env.NODE_ENV !== 'production';
 const app = next({ dev });
@@ -25,6 +25,7 @@ async function createNewGame(player1, player2) {
       player1User: player1.user,
       player2User: player2.user
     });
+    
     const dbGame = await createGame(player1.user.id, player2.user.id, 10 * 60 * 1000); // 10 minutes
     
     const chess = new Chess();
