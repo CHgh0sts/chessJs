@@ -6,6 +6,7 @@ const { Chess } = require('chess.js');
 
 // Import des fonctions de persistance
 const { createGame, getGameById, updateGame, getUserActiveGames } = require('./lib-server.js');
+const { getBestMove, createBotUser } = require('./chess-ai-server.js');
 
 const dev = process.env.NODE_ENV !== 'production';
 const app = next({ dev });
@@ -90,22 +91,23 @@ function startGameTimer(game, io) {
     const now = Date.now();
     const timeDiff = now - game.lastMoveTime;
     
-    if (game.currentPlayer === 'white') {
+    // Ne pas décrémenter le temps du bot
+    if (game.currentPlayer === 'white' && !(game.isAgainstBot && game.botColor === 'white')) {
       game.timeLeft.white -= timeDiff;
-    } else {
+    } else if (game.currentPlayer === 'black' && !(game.isAgainstBot && game.botColor === 'black')) {
       game.timeLeft.black -= timeDiff;
     }
     
     game.lastMoveTime = now;
     
-    // Vérifier si le temps est écoulé
-    if (game.timeLeft.white <= 0) {
+    // Vérifier si le temps est écoulé (seulement pour les joueurs humains)
+    if (game.timeLeft.white <= 0 && !(game.isAgainstBot && game.botColor === 'white')) {
       game.status = 'finished';
       game.winner = 'black';
       game.winReason = 'timeout';
       io.to(game.id).emit('gameOver', { winner: 'black', reason: 'timeout' });
       clearInterval(timer);
-    } else if (game.timeLeft.black <= 0) {
+    } else if (game.timeLeft.black <= 0 && !(game.isAgainstBot && game.botColor === 'black')) {
       game.status = 'finished';
       game.winner = 'white';
       game.winReason = 'timeout';
@@ -216,6 +218,7 @@ app.prepare().then(() => {
       // Vérifier que l'utilisateur fait partie de cette partie
       const isWhitePlayer = game.players.white.user.id === user.id;
       const isBlackPlayer = game.players.black.user.id === user.id;
+      const isBotGame = game.isAgainstBot && (isWhitePlayer || isBlackPlayer);
       
       if (!isWhitePlayer && !isBlackPlayer) {
         console.log(`❌ ${user.username} n'est pas un joueur de la partie ${gameId}`);
@@ -304,8 +307,54 @@ app.prepare().then(() => {
         startGameTimer(game, io);
       } else {
         // Ajouter à la liste d'attente
-        waitingPlayers.push({ socketId: socket.id, user, socket });
+        const waitingPlayer = { socketId: socket.id, user, socket, waitingSince: Date.now() };
+        waitingPlayers.push(waitingPlayer);
         socket.emit('waitingForOpponent');
+        
+        // Démarrer un timer de 10 secondes pour jouer contre un bot
+        setTimeout(async () => {
+          // Vérifier si le joueur est toujours en attente
+          const stillWaiting = waitingPlayers.find(p => p.socketId === socket.id);
+          if (stillWaiting) {
+            console.log(`🤖 ${user.username} va jouer contre un bot après 10s d'attente`);
+            
+            // Retirer de la liste d'attente
+            const index = waitingPlayers.findIndex(p => p.socketId === socket.id);
+            if (index !== -1) {
+              waitingPlayers.splice(index, 1);
+            }
+            
+            // Créer un utilisateur bot
+            const botUser = createBotUser();
+            
+            // Créer une partie contre le bot
+            const game = await createNewGame(
+              { socketId: socket.id, user },
+              { socketId: 'bot', user: botUser, socket: null } // Bot n'a pas de socket
+            );
+            
+            // Marquer la partie comme étant contre un bot
+            game.isAgainstBot = true;
+            game.botColor = 'black'; // Le bot joue les noirs
+            
+            // Joindre le joueur à la room
+            socket.join(game.id);
+            
+            // Notifier le joueur
+            socket.emit('gameFound', {
+              gameId: game.id,
+              color: 'white', // Le joueur joue toujours les blancs contre le bot
+              opponent: botUser,
+              fen: game.chess.fen(),
+              timeLeft: game.timeLeft,
+              moves: game.chess.history(),
+              isFriendlyGame: game.isFriendlyGame
+            });
+            
+            // Démarrer le timer
+            startGameTimer(game, io);
+          }
+        }, 10000); // 10 secondes
       }
     });
 
@@ -390,6 +439,77 @@ app.prepare().then(() => {
 
           if (gameStatus === 'finished') {
             io.to(gameId).emit('gameOver', { winner, reason: winReason });
+          } else if (game.isAgainstBot && game.currentPlayer === game.botColor) {
+            // Le bot doit jouer
+            setTimeout(async () => {
+              try {
+                const botMove = getBestMove(game.chess, 4); // Profondeur 4 pour un bot fort
+                if (botMove) {
+                  console.log(`🤖 Bot joue: ${botMove}`);
+                  
+                  const botMoveResult = game.chess.move(botMove);
+                  if (botMoveResult) {
+                    // Changer le joueur actuel
+                    game.currentPlayer = game.chess.turn() === 'w' ? 'white' : 'black';
+                    game.lastMoveTime = Date.now();
+                    
+                    // Vérifier l'état du jeu
+                    let botGameStatus = 'active';
+                    let botWinner = null;
+                    let botWinReason = null;
+                    
+                    if (game.chess.isCheckmate()) {
+                      botGameStatus = 'finished';
+                      botWinner = game.chess.turn() === 'w' ? 'black' : 'white';
+                      botWinReason = 'checkmate';
+                    } else if (game.chess.isDraw()) {
+                      botGameStatus = 'finished';
+                      botWinner = 'draw';
+                      botWinReason = 'draw';
+                    }
+                    
+                    game.status = botGameStatus;
+                    if (botWinner) {
+                      game.winner = botWinner;
+                      game.winReason = botWinReason;
+                    }
+                    
+                    // Mettre à jour en DB si disponible
+                    if (game.dbGame) {
+                      await updateGame(gameId, {
+                        fen: game.chess.fen(),
+                        moves: game.chess.history(),
+                        currentPlayer: game.currentPlayer,
+                        timeLeft: game.timeLeft,
+                        lastMoveTime: new Date(game.lastMoveTime),
+                        status: botGameStatus === 'finished' ? 'FINISHED' : 'ACTIVE',
+                        result: botWinner === 'white' ? 'WHITE_WIN' : botWinner === 'black' ? 'BLACK_WIN' : botWinner === 'draw' ? 'DRAW' : undefined,
+                        endedAt: botGameStatus === 'finished' ? new Date() : undefined
+                      }).catch(error => {
+                        console.error('❌ Erreur mise à jour partie bot DB:', error);
+                      });
+                    }
+                    
+                    // Envoyer la mise à jour
+                    io.to(gameId).emit('moveMade', {
+                      move: botMoveResult.san,
+                      fen: game.chess.fen(),
+                      currentPlayer: game.currentPlayer,
+                      status: botGameStatus,
+                      winner: botWinner,
+                      winReason: botWinReason,
+                      moves: game.chess.history()
+                    });
+                    
+                    if (botGameStatus === 'finished') {
+                      io.to(gameId).emit('gameOver', { winner: botWinner, reason: botWinReason });
+                    }
+                  }
+                }
+              } catch (error) {
+                console.error('❌ Erreur mouvement bot:', error);
+              }
+            }, 1000 + Math.random() * 2000); // Délai de 1-3 secondes pour simuler la réflexion
           }
         } else {
           socket.emit('error', 'Mouvement invalide');
@@ -440,7 +560,18 @@ app.prepare().then(() => {
         return;
       }
 
-      // Envoyer l'offre de partie nulle à l'adversaire
+      // Vérifier si c'est contre un bot
+      if (game.isAgainstBot) {
+        // Le bot refuse toujours les parties nulles
+        setTimeout(() => {
+          socket.emit('drawDeclined', {
+            from: 'ChessBot 🤖'
+          });
+        }, 1000 + Math.random() * 2000); // Délai de réflexion
+        return;
+      }
+
+      // Envoyer l'offre de partie nulle à l'adversaire humain
       const opponentSocketId = game.players.white.user.id === user.id 
         ? game.players.black.socketId 
         : game.players.white.socketId;
