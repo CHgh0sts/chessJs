@@ -84,22 +84,32 @@ function squareToIndex(square) {
   return rank * 8 + file;
 }
 
-// Évaluer la position du plateau
+// Cache pour les évaluations
+const evaluationCache = new Map();
+
+// Évaluer la position du plateau (optimisé)
 function evaluateBoard(chess) {
+  const fen = chess.fen();
+  
+  // Vérifier le cache
+  if (evaluationCache.has(fen)) {
+    return evaluationCache.get(fen);
+  }
+  
   let totalEvaluation = 0;
   const board = chess.board();
   
+  // Évaluation rapide basée sur le matériel principalement
   for (let i = 0; i < 8; i++) {
     for (let j = 0; j < 8; j++) {
       const piece = board[i][j];
       if (piece) {
-        const square = String.fromCharCode('a'.charCodeAt(0) + j) + (i + 1);
-        const index = squareToIndex(square);
+        const index = i * 8 + j; // Calcul direct de l'index
         
         let pieceValue = PIECE_VALUES[piece.type];
         let positionValue = 0;
         
-        // Ajouter la valeur de position selon le type de pièce
+        // Évaluation de position simplifiée pour la vitesse
         switch (piece.type) {
           case 'p':
             positionValue = piece.color === 'w' ? PAWN_TABLE[index] : PAWN_TABLE[63 - index];
@@ -121,16 +131,22 @@ function evaluateBoard(chess) {
             break;
         }
         
-        const totalValue = pieceValue + positionValue;
+        const totalValue = pieceValue + positionValue * 0.5; // Réduire l'impact des positions pour la vitesse
         totalEvaluation += piece.color === 'w' ? totalValue : -totalValue;
       }
     }
   }
   
+  // Limiter la taille du cache
+  if (evaluationCache.size > 1000) {
+    evaluationCache.clear();
+  }
+  
+  evaluationCache.set(fen, totalEvaluation);
   return totalEvaluation;
 }
 
-// Algorithme Minimax avec élagage Alpha-Beta
+// Algorithme Minimax optimisé avec élagage Alpha-Beta
 function minimax(chess, depth, alpha, beta, maximizingPlayer) {
   if (depth === 0 || chess.isGameOver()) {
     return evaluateBoard(chess);
@@ -138,9 +154,12 @@ function minimax(chess, depth, alpha, beta, maximizingPlayer) {
   
   const moves = chess.moves();
   
+  // Optimisation : ordonner les coups pour un meilleur élagage
+  const orderedMoves = orderMoves(chess, moves);
+  
   if (maximizingPlayer) {
     let maxEval = -Infinity;
-    for (const move of moves) {
+    for (const move of orderedMoves) {
       chess.move(move);
       const eval = minimax(chess, depth - 1, alpha, beta, false);
       chess.undo();
@@ -153,7 +172,7 @@ function minimax(chess, depth, alpha, beta, maximizingPlayer) {
     return maxEval;
   } else {
     let minEval = Infinity;
-    for (const move of moves) {
+    for (const move of orderedMoves) {
       chess.move(move);
       const eval = minimax(chess, depth - 1, alpha, beta, true);
       chess.undo();
@@ -167,19 +186,53 @@ function minimax(chess, depth, alpha, beta, maximizingPlayer) {
   }
 }
 
-// Trouver le meilleur coup
-function getBestMove(chess, depth = 4) {
+// Ordonner les coups pour améliorer l'élagage Alpha-Beta
+function orderMoves(chess, moves) {
+  const orderedMoves = [];
+  const captures = [];
+  const others = [];
+  
+  for (const move of moves) {
+    const moveObj = chess.move(move);
+    if (moveObj.captured) {
+      captures.push(move);
+    } else {
+      others.push(move);
+    }
+    chess.undo();
+  }
+  
+  // Prioriser les captures puis les autres coups
+  return [...captures, ...others];
+}
+
+// Trouver le meilleur coup (optimisé pour la vitesse)
+function getBestMove(chess, depth = 3) { // Réduire la profondeur de 4 à 3
   const moves = chess.moves();
   if (moves.length === 0) return null;
+  
+  // Retour rapide pour les premiers coups
+  if (moves.length > 20) {
+    // En début de partie, jouer des coups d'ouverture classiques
+    const goodOpeningMoves = ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6', 'd4', 'd5'];
+    for (const openingMove of goodOpeningMoves) {
+      if (moves.includes(openingMove)) {
+        return openingMove;
+      }
+    }
+  }
   
   let bestMove = null;
   let bestValue = -Infinity;
   const isWhite = chess.turn() === 'w';
   
-  // Mélanger les coups pour éviter la prévisibilité
-  const shuffledMoves = [...moves].sort(() => Math.random() - 0.5);
+  // Ordonner les coups pour un meilleur élagage
+  const orderedMoves = orderMoves(chess, moves);
   
-  for (const move of shuffledMoves) {
+  // Limiter le nombre de coups évalués en fin de partie
+  const movesToEvaluate = orderedMoves.slice(0, Math.min(15, orderedMoves.length));
+  
+  for (const move of movesToEvaluate) {
     chess.move(move);
     const value = minimax(chess, depth - 1, -Infinity, Infinity, !isWhite);
     chess.undo();
@@ -190,7 +243,7 @@ function getBestMove(chess, depth = 4) {
     }
   }
   
-  return bestMove;
+  return bestMove || moves[0]; // Fallback au premier coup si aucun trouvé
 }
 
 // Créer un utilisateur bot

@@ -443,7 +443,7 @@ app.prepare().then(() => {
             // Le bot doit jouer
             setTimeout(async () => {
               try {
-                const botMove = getBestMove(game.chess, 4); // Profondeur 4 pour un bot fort
+                const botMove = getBestMove(game.chess, 3); // Profondeur 3 pour un bot rapide mais fort
                 if (botMove) {
                   console.log(`🤖 Bot joue: ${botMove}`);
                   
@@ -509,7 +509,7 @@ app.prepare().then(() => {
               } catch (error) {
                 console.error('❌ Erreur mouvement bot:', error);
               }
-            }, 1000 + Math.random() * 2000); // Délai de 1-3 secondes pour simuler la réflexion
+            }, 300 + Math.random() * 700); // Délai de 0.3-1 seconde pour une réponse rapide
           }
         } else {
           socket.emit('error', 'Mouvement invalide');
@@ -567,7 +567,7 @@ app.prepare().then(() => {
           socket.emit('drawDeclined', {
             from: 'ChessBot 🤖'
           });
-        }, 1000 + Math.random() * 2000); // Délai de réflexion
+        }, 200 + Math.random() * 300); // Délai de réflexion rapide
         return;
       }
 
