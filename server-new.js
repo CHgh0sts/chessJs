@@ -2,9 +2,8 @@ const { createServer } = require('http');
 const next = require('next');
 const { Server } = require('socket.io');
 const { Chess } = require('chess.js');
-const { randomUUID } = require('crypto');
-// Base de données temporairement désactivée pour focus sur timer
-// const { createGame, getGameById, updateGame, getUserActiveGames } = require('./lib-server.js');
+const { v4: uuidv4 } = require('uuid');
+const { createGame, getGameById, updateGame, getUserActiveGames } = require('./lib-server.js');
 const { getBestMove } = require('./chess-ai-server.js');
 
 const dev = process.env.NODE_ENV !== 'production';
@@ -86,7 +85,7 @@ function startGameTimer(game, io) {
 }
 
 async function createNewGame(player1, player2, isAgainstBot = false) {
-  const gameId = randomUUID();
+  const gameId = uuidv4();
   const timeControl = 10 * 60 * 1000; // 10 minutes
   
   const game = {
@@ -125,11 +124,6 @@ app.prepare().then(() => {
     console.log('🔌 Nouvelle connexion:', socket.id);
 
     socket.on('findGame', async (userData) => {
-      if (!userData || !userData.username) {
-        console.log('❌ Données utilisateur invalides:', userData);
-        socket.emit('error', { message: 'Données utilisateur manquantes' });
-        return;
-      }
       console.log('🔍 Recherche de partie:', userData.username);
       
       // Chercher un adversaire humain

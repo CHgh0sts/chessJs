@@ -355,8 +355,15 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   const findGame = () => {
-    if (socket) {
-      socket.emit('findGame');
+    if (socket && user) {
+      console.log('🔍 Envoi findGame avec utilisateur:', user.username);
+      socket.emit('findGame', {
+        username: user.username,
+        rating: user.rating,
+        id: user.id
+      });
+    } else {
+      console.log('❌ Impossible de chercher une partie - socket ou user manquant');
     }
   };
 
