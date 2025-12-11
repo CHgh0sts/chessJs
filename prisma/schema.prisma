@@ -12,7 +12,7 @@ model User {
   username     String   @unique
   email        String   @unique
   password     String
-  rating       Int      @default(1200)
+  rating       Int      @default(0)
   gamesPlayed  Int      @default(0)
   gamesWon     Int      @default(0)
   gamesLost    Int      @default(0)
@@ -26,21 +26,23 @@ model User {
 }
 
 model Game {
-  id          String      @id @default(cuid())
-  whiteId     String
-  blackId     String
-  fen         String      @default("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
-  moves       String      @default("")
-  status      GameStatus  @default(ACTIVE)
-  result      GameResult?
-  timeControl Int         @default(600000)
-  timeLeft    String      @default("{\"white\":600000,\"black\":600000}")
-  startedAt   DateTime    @default(now())
-  endedAt     DateTime?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  blackPlayer User        @relation("BlackPlayer", fields: [blackId], references: [id])
-  whitePlayer User        @relation("WhitePlayer", fields: [whiteId], references: [id])
+  id            String      @id @default(cuid())
+  whiteId       String
+  blackId       String
+  fen           String      @default("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1")
+  moves         String      @default("[]")
+  status        GameStatus  @default(ACTIVE)
+  result        GameResult?
+  timeControl   Int         @default(600000)
+  timeLeft      String      @default("{\"white\":600000,\"black\":600000}")
+  currentPlayer String      @default("white")
+  lastMoveTime  DateTime?
+  startedAt     DateTime    @default(now())
+  endedAt       DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  blackPlayer   User        @relation("BlackPlayer", fields: [blackId], references: [id])
+  whitePlayer   User        @relation("WhitePlayer", fields: [whiteId], references: [id])
 
   @@map("games")
 }

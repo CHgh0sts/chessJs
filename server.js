@@ -4,8 +4,8 @@ const next = require('next');
 const { Server } = require('socket.io');
 const { Chess } = require('chess.js');
 
-// Import des fonctions de persistance (sera chargé de manière dynamique)
-let gameLib = null;
+// Import des fonctions de persistance
+const { createGame, getGameById, updateGame, getUserActiveGames } = require('./src/lib/game-server.js');
 
 const dev = process.env.NODE_ENV !== 'production';
 const app = next({ dev });
@@ -16,31 +16,65 @@ const games = new Map();
 const waitingPlayers = [];
 const connectedUsers = new Map();
 
-function createNewGame(player1, player2) {
-  // Création en mémoire seulement pour éviter les problèmes de compilation
-  const gameId = Math.random().toString(36).substring(7);
-  const chess = new Chess();
-  
-  const game = {
-    id: gameId,
-    chess,
-    players: {
-      white: player1,
-      black: player2
-    },
-    timeLeft: {
-      white: 10 * 60 * 1000, // 10 minutes en millisecondes
-      black: 10 * 60 * 1000
-    },
-    currentPlayer: 'white',
-    status: 'active',
-    lastMoveTime: Date.now(),
-    spectators: []
-  };
-  
-  games.set(gameId, game);
-  console.log('🎮 Nouvelle partie créée:', gameId);
-  return game;
+async function createNewGame(player1, player2) {
+  try {
+    // Créer la partie en base de données
+    console.log('🔧 Création partie DB - IDs:', { 
+      player1: player1.user.id, 
+      player2: player2.user.id,
+      player1User: player1.user,
+      player2User: player2.user
+    });
+    const dbGame = await createGame(player1.user.id, player2.user.id, 10 * 60 * 1000); // 10 minutes
+    
+    const chess = new Chess();
+    
+    const game = {
+      id: dbGame.id,
+      chess,
+      players: {
+        white: player1,
+        black: player2
+      },
+      timeLeft: dbGame.timeLeft,
+      currentPlayer: dbGame.currentPlayer,
+      status: 'active',
+      lastMoveTime: Date.now(),
+      spectators: [],
+      dbGame // Référence vers la partie en base
+    };
+
+    games.set(dbGame.id, game);
+    console.log('🎮 Nouvelle partie créée en DB:', dbGame.id);
+    return game;
+  } catch (error) {
+    console.error('❌ Erreur lors de la création de la partie en base:', error);
+    
+    // Fallback vers la création en mémoire seulement
+    const gameId = Math.random().toString(36).substring(7);
+    const chess = new Chess();
+    
+    const game = {
+      id: gameId,
+      chess,
+      players: {
+        white: player1,
+        black: player2
+      },
+      timeLeft: {
+        white: 10 * 60 * 1000,
+        black: 10 * 60 * 1000
+      },
+      currentPlayer: 'white',
+      status: 'active',
+      lastMoveTime: Date.now(),
+      spectators: []
+    };
+    
+    games.set(gameId, game);
+    console.log('🎮 Nouvelle partie créée en mémoire (fallback):', gameId);
+    return game;
+  }
 }
 
 function startGameTimer(game, io) {
@@ -108,7 +142,114 @@ app.prepare().then(() => {
       console.log(`Utilisateur ${user.username} connecté`);
     });
 
-    socket.on('findGame', () => {
+    socket.on('rejoinGame', async (data) => {
+      const { gameId } = data;
+      const user = socket.user;
+      
+      if (!user) {
+        socket.emit('error', 'Utilisateur non authentifié');
+        return;
+      }
+
+      console.log(`🔄 ${user.username} tente de rejoindre la partie: ${gameId}`);
+      
+      // D'abord vérifier en mémoire
+      let game = games.get(gameId);
+      
+      // Si pas en mémoire, essayer de charger depuis la DB
+      if (!game) {
+        console.log(`🔄 Partie ${gameId} non trouvée en mémoire, chargement depuis DB...`);
+        try {
+          const dbGame = await getGameById(gameId);
+          if (!dbGame || dbGame.status !== 'ACTIVE') {
+            console.log(`❌ Partie ${gameId} non trouvée en DB ou terminée`);
+            socket.emit('gameNotFound', { gameId });
+            return;
+          }
+          
+          // Reconstituer la partie en mémoire depuis la DB
+          const chess = new Chess(dbGame.fen);
+          
+          // Récupérer les infos des joueurs (pour l'instant, on utilise des infos minimales)
+          game = {
+            id: dbGame.id,
+            chess,
+            players: {
+              white: { 
+                user: { id: dbGame.whiteId, username: `Player_${dbGame.whiteId.slice(0,8)}` }, 
+                socketId: null, 
+                socket: null 
+              },
+              black: { 
+                user: { id: dbGame.blackId, username: `Player_${dbGame.blackId.slice(0,8)}` }, 
+                socketId: null, 
+                socket: null 
+              }
+            },
+            timeLeft: dbGame.timeLeft,
+            currentPlayer: dbGame.currentPlayer,
+            status: 'active',
+            lastMoveTime: dbGame.lastMoveTime ? dbGame.lastMoveTime.getTime() : Date.now(),
+            spectators: [],
+            dbGame
+          };
+          
+          games.set(gameId, game);
+          console.log(`✅ Partie ${gameId} restaurée depuis DB`);
+        } catch (error) {
+          console.error(`❌ Erreur lors du chargement de la partie ${gameId}:`, error);
+          socket.emit('gameNotFound', { gameId });
+          return;
+        }
+      }
+      
+      if (game.status !== 'active') {
+        console.log(`❌ Partie ${gameId} terminée (status: ${game.status})`);
+        socket.emit('gameNotFound', { gameId });
+        return;
+      }
+
+      // Vérifier que l'utilisateur fait partie de cette partie
+      const isWhitePlayer = game.players.white.user.id === user.id;
+      const isBlackPlayer = game.players.black.user.id === user.id;
+      
+      if (!isWhitePlayer && !isBlackPlayer) {
+        console.log(`❌ ${user.username} n'est pas un joueur de la partie ${gameId}`);
+        socket.emit('gameNotFound', { gameId });
+        return;
+      }
+
+      // Rejoindre la room de la partie
+      socket.join(gameId);
+
+      // Mettre à jour les informations du joueur
+      if (isWhitePlayer) {
+        game.players.white.socketId = socket.id;
+        game.players.white.socket = socket;
+      } else {
+        game.players.black.socketId = socket.id;
+        game.players.black.socket = socket;
+      }
+
+      // Envoyer les données de la partie
+      const playerColor = isWhitePlayer ? 'white' : 'black';
+      const opponent = isWhitePlayer ? game.players.black.user : game.players.white.user;
+
+      socket.emit('gameRejoined', {
+        gameId: game.id,
+        color: playerColor,
+        opponent: opponent,
+        fen: game.chess.fen(),
+        currentPlayer: game.currentPlayer,
+        timeLeft: game.timeLeft,
+        status: game.status,
+        moves: game.chess.history()
+      });
+
+      console.log(`✅ ${user.username} a rejoint la partie ${gameId} en tant que ${playerColor}`);
+    });
+
+    socket.on('findGame', async () => {
       const user = socket.user;
       if (!user) {
         socket.emit('error', 'Utilisateur non authentifié');
@@ -124,7 +265,7 @@ app.prepare().then(() => {
       if (waitingPlayers.length > 0) {
         // Trouver un adversaire
         const opponent = waitingPlayers.shift();
-        const game = createNewGame(
+        const game = await createNewGame(
           { socketId: socket.id, user },
           { socketId: opponent.socketId, user: opponent.user }
         );
@@ -139,7 +280,8 @@ app.prepare().then(() => {
           color: 'white',
           opponent: opponent.user,
           fen: game.chess.fen(),
-          timeLeft: game.timeLeft
+          timeLeft: game.timeLeft,
+          moves: game.chess.history()
         });
 
         opponent.socket.emit('gameFound', {
@@ -147,7 +289,8 @@ app.prepare().then(() => {
           color: 'black',
           opponent: user,
           fen: game.chess.fen(),
-          timeLeft: game.timeLeft
+          timeLeft: game.timeLeft,
+          moves: game.chess.history()
         });
 
         // Démarrer le timer
@@ -159,7 +302,7 @@ app.prepare().then(() => {
       }
     });
 
-    socket.on('makeMove', (data) => {
+    socket.on('makeMove', async (data) => {
       const { gameId, move } = data;
       const game = games.get(gameId);
 
@@ -188,7 +331,21 @@ app.prepare().then(() => {
           game.lastMoveTime = Date.now();
           game.currentPlayer = game.currentPlayer === 'white' ? 'black' : 'white';
 
-          // TODO: Sauvegarder le coup en base de données
+          // Sauvegarder le coup en base de données
+          if (game.dbGame) {
+            try {
+              await updateGame(gameId, {
+                fen: game.chess.fen(),
+                moves: game.chess.history(),
+                timeLeft: game.timeLeft,
+                currentPlayer: game.currentPlayer,
+                lastMoveTime: new Date()
+              });
+              console.log('💾 Coup sauvegardé en base:', moveResult.san);
+            } catch (dbError) {
+              console.error('❌ Erreur de sauvegarde:', dbError);
+            }
+          }
 
           // Vérifier les conditions de fin de partie
           let gameStatus = 'active';
@@ -220,7 +377,8 @@ app.prepare().then(() => {
             currentPlayer: game.currentPlayer,
             status: gameStatus,
             winner,
-            winReason
+            winReason,
+            moves: game.chess.history()
           });
 
           if (gameStatus === 'finished') {

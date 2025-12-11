@@ -253,6 +253,43 @@ export default function GameRoom() {
                 </div>
               </div>
             )}
+
+            {/* Historique des coups */}
+            <div className="bg-gray-700 rounded-lg shadow-lg p-6">
+              <h3 className="text-lg font-bold text-white mb-4">Historique des coups</h3>
+              <div className="max-h-64 overflow-y-auto">
+                {gameState.moves && gameState.moves.length > 0 ? (
+                  <div className="space-y-1">
+                    {gameState.moves.map((move, index) => {
+                      const moveNumber = Math.floor(index / 2) + 1;
+                      const isWhiteMove = index % 2 === 0;
+                      
+                      return (
+                        <div key={index} className="flex items-center text-sm">
+                          {isWhiteMove && (
+                            <span className="text-gray-300 font-mono w-8 text-right mr-2">
+                              {moveNumber}.
+                            </span>
+                          )}
+                          {!isWhiteMove && <span className="w-10"></span>}
+                          <span className={`font-mono px-2 py-1 rounded ${
+                            isWhiteMove 
+                              ? 'bg-gray-100 text-gray-800' 
+                              : 'bg-gray-800 text-white border border-gray-600'
+                          }`}>
+                            {move}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-gray-400 text-sm italic text-center py-4">
+                    Aucun coup joué pour le moment
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>

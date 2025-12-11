@@ -19,6 +19,7 @@ interface GameState {
   status: 'waiting' | 'active' | 'finished';
   winner?: 'white' | 'black' | 'draw';
   winReason?: string;
+  moves: string[];
 }
 
 interface SocketContextType {
@@ -38,13 +39,63 @@ interface SocketContextType {
 
 const SocketContext = createContext<SocketContextType | undefined>(undefined);
 
+// Fonctions de persistance de l'état de jeu
+const saveGameState = (gameState: GameState | null) => {
+  if (typeof window !== 'undefined') {
+    if (gameState) {
+      localStorage.setItem('chess_game_state', JSON.stringify(gameState));
+    } else {
+      localStorage.removeItem('chess_game_state');
+    }
+  }
+};
+
+const loadGameState = (): GameState | null => {
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem('chess_game_state');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        localStorage.removeItem('chess_game_state');
+        return null;
+      }
+    }
+  }
+  return null;
+};
+
 export function SocketProvider({ children }: { children: React.ReactNode }) {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [connected, setConnected] = useState(false);
-  const [gameState, setGameState] = useState<GameState | null>(null);
+  const [gameState, setGameState] = useState<GameState | null>(() => loadGameState());
   const [waitingForOpponent, setWaitingForOpponent] = useState(false);
   const [drawOffer, setDrawOffer] = useState<string | null>(null);
   const { user } = useAuth();
+
+  // Sauvegarder automatiquement l'état de jeu quand il change
+  useEffect(() => {
+    saveGameState(gameState);
+  }, [gameState]);
+
+  // Vérifier périodiquement si on a un état sauvegardé sans être dans une partie
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const savedGame = loadGameState();
+      if (savedGame && !gameState && connected) {
+        console.log('🔍 État sauvegardé détecté sans partie active - tentative de nettoyage');
+        // Si on a un état sauvegardé mais pas de partie active après 10 secondes
+        setTimeout(() => {
+          if (loadGameState() && !gameState) {
+            console.log('🧹 Nettoyage automatique de l\'état orphelin');
+            saveGameState(null);
+          }
+        }, 10000);
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [gameState, connected]);
 
   useEffect(() => {
     if (user) {
@@ -70,6 +121,23 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
         console.log('✅ Connecté au serveur Socket.IO');
         setConnected(true);
         newSocket.emit('userConnected', user);
+
+        // Si on a une partie sauvegardée, tenter de la rejoindre
+        const savedGame = loadGameState();
+        if (savedGame) {
+          console.log('🔄 Tentative de reconnexion à la partie:', savedGame.gameId);
+          console.log('📝 État sauvegardé complet:', JSON.stringify(savedGame, null, 2));
+          newSocket.emit('rejoinGame', { gameId: savedGame.gameId });
+          
+          // Timeout de sécurité - si pas de réponse en 5 secondes, nettoyer
+          setTimeout(() => {
+            console.log('⏰ Timeout de reconnexion - nettoyage de l\'état');
+            if (loadGameState()?.gameId === savedGame.gameId) {
+              setGameState(null);
+              saveGameState(null);
+            }
+          }, 5000);
+        }
       });
 
       newSocket.on('disconnect', (reason) => {
@@ -109,8 +177,33 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
           fen: data.fen,
           currentPlayer: 'white',
           timeLeft: data.timeLeft,
-          status: 'active'
+          status: 'active',
+          moves: data.moves || []
         });
+      });
+
+      // Gérer la reconnexion à une partie existante
+      newSocket.on('gameRejoined', (data) => {
+        console.log('🔄 Partie rejointe avec succès:', data.gameId);
+        setWaitingForOpponent(false);
+        setGameState({
+          gameId: data.gameId,
+          color: data.color,
+          opponent: data.opponent,
+          fen: data.fen,
+          currentPlayer: data.currentPlayer || 'white',
+          timeLeft: data.timeLeft,
+          status: data.status || 'active',
+          moves: data.moves || []
+        });
+      });
+
+      newSocket.on('gameNotFound', (data) => {
+        console.log('❌ Partie non trouvée:', data.gameId);
+        console.log('🧹 Nettoyage de l\'état sauvegardé');
+        // Nettoyer l'état sauvegardé car la partie n'existe plus
+        setGameState(null);
+        saveGameState(null);
       });
 
       newSocket.on('moveMade', (data) => {
@@ -120,7 +213,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
           currentPlayer: data.currentPlayer,
           status: data.status,
           winner: data.winner,
-          winReason: data.winReason
+          winReason: data.winReason,
+          moves: data.moves || prev.moves
         } : null);
       });
 
@@ -138,6 +232,12 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
           winner: data.winner,
           winReason: data.reason
         } : null);
+        
+        // Nettoyer automatiquement après 5 secondes
+        setTimeout(() => {
+          setGameState(null);
+          saveGameState(null);
+        }, 5000);
       });
 
       newSocket.on('error', (error) => {
@@ -164,6 +264,14 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
         newSocket.disconnect();
       };
     }
+    
+    // Nettoyer l'état si l'utilisateur se déconnecte
+    return () => {
+      setSocket(null);
+      setConnected(false);
+      setWaitingForOpponent(false);
+      // Ne pas nettoyer gameState ici pour permettre la reconnexion
+    };
   }, [user]);
 
   const findGame = () => {
@@ -182,8 +290,12 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   };
 
   const leaveGame = () => {
+    if (socket && gameState) {
+      socket.emit('leaveGame', { gameId: gameState.gameId });
+    }
     setGameState(null);
     setWaitingForOpponent(false);
+    saveGameState(null); // Nettoyer le localStorage
   };
 
   const offerDraw = () => {

@@ -6,11 +6,13 @@ export interface GameData {
   whiteId: string;
   blackId: string;
   fen: string;
-      moves: string;
+  moves: string;
   status: GameStatus;
   result?: GameResult;
   timeControl: number;
   timeLeft: string;
+  currentPlayer: string;
+  lastMoveTime?: Date;
   startedAt: Date;
   endedAt?: Date;
 }
@@ -33,6 +35,8 @@ export async function createGame(
         white: timeControl,
         black: timeControl,
       }),
+      currentPlayer: 'white',
+      lastMoveTime: new Date(),
       startedAt: new Date(),
     },
   });
@@ -47,6 +51,8 @@ export async function createGame(
     result: game.result || undefined,
     timeControl: game.timeControl,
     timeLeft: game.timeLeft,
+    currentPlayer: game.currentPlayer,
+    lastMoveTime: game.lastMoveTime || undefined,
     startedAt: game.startedAt,
     endedAt: game.endedAt || undefined,
   };
@@ -70,6 +76,8 @@ export async function getGameById(gameId: string): Promise<GameData | null> {
     result: game.result || undefined,
     timeControl: game.timeControl,
     timeLeft: game.timeLeft,
+    currentPlayer: game.currentPlayer,
+    lastMoveTime: game.lastMoveTime || undefined,
     startedAt: game.startedAt,
     endedAt: game.endedAt || undefined,
   };
@@ -82,6 +90,8 @@ export async function updateGame(
     fen?: string;
     moves?: string;
     timeLeft?: string;
+    currentPlayer?: string;
+    lastMoveTime?: Date;
     status?: GameStatus;
     result?: GameResult;
     endedAt?: Date;
