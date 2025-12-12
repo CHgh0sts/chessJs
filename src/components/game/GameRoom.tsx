@@ -5,11 +5,52 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useDialog } from '@/hooks/useDialog';
 import ChessBoard from '../chess/ChessBoard';
 import Dialog from '../ui/Dialog';
+import ChessPiece from '../chess/ChessPiece';
 
 export default function GameRoom() {
   const { gameState, makeMove, offerDraw, resign, drawOffer, acceptDraw, declineDraw, friendlyGameOffer, offerFriendlyGame, acceptFriendlyGame, declineFriendlyGame } = useSocket();
   const { user } = useAuth();
   const { isOpen, dialogOptions, onConfirm, showDialog, hideDialog } = useDialog();
+
+  // Fonction pour analyser un coup et extraire la pièce qui a bougé
+  const parseMoveNotation = (move: string, isWhiteMove: boolean) => {
+    // Retirer les annotations (+, #, !, ?, etc.)
+    const cleanMove = move.replace(/[+#!?]/g, '');
+    
+    // Déterminer la couleur de la pièce
+    const pieceColor = isWhiteMove ? 'white' : 'black';
+    
+    // Cas spéciaux
+    if (cleanMove === 'O-O' || cleanMove === 'O-O-O') {
+      return {
+        piece: isWhiteMove ? 'K' : 'k',
+        pieceColor,
+        destination: cleanMove === 'O-O' ? (isWhiteMove ? 'g1' : 'g8') : (isWhiteMove ? 'c1' : 'c8'),
+        moveType: 'castling'
+      };
+    }
+    
+    // Extraire la case de destination (toujours les 2 derniers caractères)
+    const destination = cleanMove.slice(-2);
+    
+    // Déterminer la pièce qui a bougé
+    let piece = 'P'; // Par défaut, c'est un pion
+    
+    if (/^[KQRBN]/.test(cleanMove)) {
+      // Le coup commence par une lettre majuscule = pièce spécifique
+      piece = cleanMove[0];
+    }
+    
+    // Ajuster la casse selon la couleur
+    const finalPiece = isWhiteMove ? piece : piece.toLowerCase();
+    
+    return {
+      piece: finalPiece,
+      pieceColor,
+      destination,
+      moveType: 'normal'
+    };
+  };
 
   if (!gameState) {
     return (
@@ -325,34 +366,78 @@ export default function GameRoom() {
               <h3 className="text-lg font-bold text-white mb-4">Historique des coups</h3>
               <div className="max-h-64 overflow-y-auto">
                 {gameState.moves && gameState.moves.length > 0 ? (
-                  <div className="space-y-1">
+                  <div className="space-y-2">
                     {gameState.moves.slice().reverse().map((move, reverseIndex) => {
                       const index = gameState.moves.length - 1 - reverseIndex;
                       const moveNumber = Math.floor(index / 2) + 1;
                       const isWhiteMove = index % 2 === 0;
+                      const moveInfo = parseMoveNotation(move, isWhiteMove);
                       
                       return (
-                        <div key={`move-${index}`} className="flex items-center text-sm">
+                        <div key={`move-${index}`} className="flex items-center">
+                          {/* Numéro du coup */}
                           {isWhiteMove && (
-                            <span className="text-gray-300 font-mono w-8 text-right mr-2">
+                            <span className="text-gray-300 font-bold text-sm w-8 text-right mr-3">
                               {moveNumber}.
                             </span>
                           )}
-                          {!isWhiteMove && <span className="w-10"></span>}
-                          <span className={`font-mono px-2 py-1 rounded ${
+                          {!isWhiteMove && <span className="w-11"></span>}
+                          
+                          {/* Conteneur du coup */}
+                          <div className={`flex items-center gap-2 px-2 py-1 rounded min-w-0 flex-1 ${
                             isWhiteMove 
-                              ? 'bg-gray-100 text-gray-800' 
-                              : 'bg-gray-800 text-white border border-gray-600'
+                              ? 'bg-white text-gray-900 shadow-sm border border-gray-200' 
+                              : 'bg-gray-900 text-white border border-gray-500'
                           }`}>
-                            {move}
-                          </span>
+                            {/* Icône de la pièce avec fond contrasté */}
+                            <div className={`flex items-center justify-center w-9 h-9 rounded-full flex-shrink-0 overflow-visible ${
+                              isWhiteMove 
+                                ? 'bg-gray-800' 
+                                : 'bg-gray-100'
+                            }`}>
+                              <span 
+                                className="leading-none"
+                                style={{
+                                  fontSize: '2rem',
+                                  color: isWhiteMove ? '#ffffff' : '#000000',
+                                  textShadow: isWhiteMove 
+                                    ? '0 0 5px rgba(0,0,0,1), 2px 2px 4px rgba(0,0,0,1)' 
+                                    : '0 0 5px rgba(255,255,255,1), 2px 2px 4px rgba(255,255,255,1)',
+                                  filter: 'contrast(1.8) brightness(1.4)',
+                                  WebkitTextStroke: isWhiteMove ? '1px rgba(0,0,0,0.5)' : '1px rgba(255,255,255,0.5)',
+                                  transform: 'scale(1.1)'
+                                }}
+                              >
+                                {(() => {
+                                  const pieces = {
+                                    'K': '♔', 'Q': '♕', 'R': '♖', 'B': '♗', 'N': '♘', 'P': '♙',
+                                    'k': '♚', 'q': '♛', 'r': '♜', 'b': '♝', 'n': '♞', 'p': '♟'
+                                  };
+                                  return pieces[moveInfo.piece] || '';
+                                })()}
+                              </span>
+                            </div>
+                            
+                            {/* Texte du mouvement */}
+                            <div className="flex items-center gap-1 min-w-0">
+                              <span className="text-xs opacity-60">→</span>
+                              <span className={`font-mono font-bold text-sm px-1 py-0.5 rounded ${
+                                isWhiteMove 
+                                  ? 'bg-blue-100 text-blue-800' 
+                                  : 'bg-blue-800 text-blue-200'
+                              }`}>
+                                {moveInfo.destination.toUpperCase()}
+                              </span>
+                            </div>
+                          </div>
                         </div>
                       );
                     })}
                   </div>
                 ) : (
-                  <div className="text-gray-400 text-sm italic text-center py-4">
-                    Aucun coup joué pour le moment
+                  <div className="text-gray-400 text-sm italic text-center py-8">
+                    <div className="text-4xl mb-2">♔</div>
+                    <div>Aucun coup joué pour le moment</div>
                   </div>
                 )}
               </div>

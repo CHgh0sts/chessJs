@@ -5,7 +5,31 @@ const { Chess } = require('chess.js');
 const { randomUUID } = require('crypto');
 // Base de données temporairement désactivée pour focus sur timer
 // const { createGame, getGameById, updateGame, getUserActiveGames } = require('./lib-server.js');
-const { getBestMove } = require('./chess-ai-fast.js');
+const { getBestMove, getBestMoveWithAnalysis } = require('./chess-ai-fast.js');
+
+// Fonction pour calculer le temps de réflexion selon le type de coup
+function calculateReflectionTime(moveData) {
+  const baseTime = 800; // Temps de base en ms
+  
+  switch (moveData.moveType) {
+    case 'escape':
+      return 400; // Fuite rapide en cas d'échec
+    case 'learned':
+      return 600; // Coup appris, assez rapide
+    case 'good_capture':
+      return 1000; // Bonne capture, réflexion moyenne
+    case 'small_capture':
+      return 1200; // Petite capture, un peu plus de réflexion
+    case 'opening':
+      return 1500; // Coups d'ouverture, réflexion modérée
+    case 'tactical':
+      return 2000; // Coups tactiques, bonne réflexion
+    case 'positional':
+      return 2800; // Coups positionnels, longue réflexion
+    default:
+      return baseTime;
+  }
+}
 
 const dev = process.env.NODE_ENV !== 'production';
 const app = next({ dev });
@@ -85,7 +109,7 @@ function startGameTimer(game, io) {
   game.timer = timer;
 }
 
-async function createNewGame(player1, player2, isAgainstBot = false) {
+async function createNewGame(player1, player2, isAgainstBot = false, botColor = 'black') {
   const gameId = randomUUID();
   const timeControl = 10 * 60 * 1000; // 10 minutes
   
@@ -99,12 +123,12 @@ async function createNewGame(player1, player2, isAgainstBot = false) {
     spectators: [],
     isFriendlyGame: false,
     isAgainstBot,
-    botColor: isAgainstBot ? 'black' : null,
+    botColor: isAgainstBot ? botColor : null,
     timer: null
   };
   
   games.set(gameId, game);
-  console.log(`🎮 Nouvelle partie créée: ${gameId} - Bot: ${isAgainstBot}`);
+  console.log(`🎮 Nouvelle partie créée: ${gameId} - Bot: ${isAgainstBot} (couleur: ${botColor})`);
   
   return game;
 }
@@ -178,18 +202,24 @@ app.prepare().then(() => {
           if (playerIndex !== -1) {
             waitingPlayers.splice(playerIndex, 1);
             
-            // Créer partie contre bot
+            // Créer partie contre bot avec couleur aléatoire
+            const playerColor = Math.random() < 0.5 ? 'white' : 'black';
+            const botColor = playerColor === 'white' ? 'black' : 'white';
+            
             createNewGame(
               { id: socket.id, ...userData },
               { id: 'bot', username: 'ChessBot 🤖', rating: 2000 },
-              true
+              true,
+              botColor
             ).then(game => {
               socket.join(game.id);
+              
+              console.log(`🎲 Nouvelle partie contre bot - Joueur: ${playerColor}, Bot: ${botColor}`);
               
               socket.emit('gameFound', {
                 gameId: game.id,
                 opponent: { username: 'ChessBot 🤖', rating: 2000 },
-                color: 'white',
+                color: playerColor,
                 fen: game.chess.fen(),
                 timeLeft: game.timeLeft,
                 currentPlayer: game.currentPlayer,
@@ -198,6 +228,38 @@ app.prepare().then(() => {
               });
               
               startGameTimer(game, io);
+              
+              // Si le bot joue en premier (blanc), faire son premier coup
+              if (botColor === 'white') {
+                setTimeout(async () => {
+                  try {
+                    console.log('🤖 Bot joue en premier (blanc)...');
+                    const botMoveData = await getBestMoveWithAnalysis(game.chess.fen());
+                    const reflectionTime = calculateReflectionTime(botMoveData);
+                    
+                    console.log(`🧠 Premier coup - Type: ${botMoveData.moveType} - Réflexion: ${reflectionTime}ms`);
+                    
+                    if (botMoveData.move) {
+                      setTimeout(() => {
+                        const botMoveResult = game.chess.move(botMoveData.move);
+                        if (botMoveResult) {
+                          game.currentPlayer = game.chess.turn() === 'w' ? 'white' : 'black';
+                          console.log(`🤖 Premier coup du bot: ${botMoveResult.san}`);
+                          
+                          socket.emit('moveMade', {
+                            move: botMoveResult.san,
+                            fen: game.chess.fen(),
+                            currentPlayer: game.currentPlayer,
+                            moves: game.chess.history()
+                          });
+                        }
+                      }, reflectionTime);
+                    }
+                  } catch (error) {
+                    console.error('❌ Erreur premier coup bot:', error);
+                  }
+                }, 500); // Délai initial réduit
+              }
             });
           }
         }, 10000);
@@ -228,8 +290,11 @@ app.prepare().then(() => {
             let reason = 'draw';
             
             if (game.chess.isCheckmate()) {
+              // chess.turn() renvoie la couleur du joueur mat (qui ne peut plus jouer)
+              const playerInCheckmate = game.chess.turn() === 'w' ? 'white' : 'black';
               winner = game.chess.turn() === 'w' ? 'black' : 'white';
               reason = 'checkmate';
+              console.log(`🏆 ÉCHEC ET MAT - Joueur mat: ${playerInCheckmate}, Gagnant: ${winner}`);
             }
             
             io.to(game.id).emit('gameOver', { winner, reason });
@@ -242,46 +307,56 @@ app.prepare().then(() => {
           
           // Si c'est contre le bot et c'est son tour
           if (game.isAgainstBot && game.currentPlayer === game.botColor) {
-            // Pas de délai artificiel - le bot joue dès qu'il trouve le meilleur coup
+            // Bot réfléchit avec temps adaptatif selon le type de coup
             (async () => {
               try {
                 console.log('🤖 Bot réfléchit...');
                 const startTime = Date.now();
-                const botMove = await getBestMove(game.chess.fen());
+                const botMoveData = await getBestMoveWithAnalysis(game.chess.fen());
                 const thinkTime = Date.now() - startTime;
-                console.log(`🧠 Bot a réfléchi ${thinkTime}ms`);
                 
-                if (botMove) {
-                  const botMoveResult = game.chess.move(botMove);
-                  if (botMoveResult) {
-                    game.currentPlayer = game.chess.turn() === 'w' ? 'white' : 'black';
-                    console.log(`🤖 Bot joue: ${botMoveResult.san}`);
-                    
-                    io.to(game.id).emit('moveMade', {
-                      move: botMoveResult.san,
-                      fen: game.chess.fen(),
-                      currentPlayer: game.currentPlayer,
-                      moves: game.chess.history()
-                    });
-                    
-                    // Vérifier fin de partie après coup du bot
-                    if (game.chess.isGameOver()) {
-                      game.status = 'finished';
-                      let winner = null;
-                      let reason = 'draw';
+                // Calculer le temps de réflexion selon le type de coup
+                let reflectionTime = calculateReflectionTime(botMoveData);
+                
+                console.log(`🧠 Bot a analysé en ${thinkTime}ms - Type: ${botMoveData.moveType} - Réflexion: ${reflectionTime}ms`);
+                
+                if (botMoveData.move) {
+                  // Attendre le temps de réflexion avant de jouer
+                  setTimeout(() => {
+                    const botMoveResult = game.chess.move(botMoveData.move);
+                    if (botMoveResult) {
+                      game.currentPlayer = game.chess.turn() === 'w' ? 'white' : 'black';
+                      console.log(`🤖 Bot joue: ${botMoveResult.san} (après ${reflectionTime}ms de réflexion)`);
                       
-                      if (game.chess.isCheckmate()) {
-                        winner = game.chess.turn() === 'w' ? 'black' : 'white';
-                        reason = 'checkmate';
-                      }
+                      io.to(game.id).emit('moveMade', {
+                        move: botMoveResult.san,
+                        fen: game.chess.fen(),
+                        currentPlayer: game.currentPlayer,
+                        moves: game.chess.history()
+                      });
                       
-                      io.to(game.id).emit('gameOver', { winner, reason });
-                      if (game.timer) {
-                        clearInterval(game.timer);
-                        game.timer = null;
+                      // Vérifier fin de partie après coup du bot
+                      if (game.chess.isGameOver()) {
+                        game.status = 'finished';
+                        let winner = null;
+                        let reason = 'draw';
+                        
+                        if (game.chess.isCheckmate()) {
+                          // chess.turn() renvoie la couleur du joueur mat (qui ne peut plus jouer)
+                          const playerInCheckmate = game.chess.turn() === 'w' ? 'white' : 'black';
+                          winner = game.chess.turn() === 'w' ? 'black' : 'white';
+                          reason = 'checkmate';
+                          console.log(`🏆 ÉCHEC ET MAT (après coup bot) - Joueur mat: ${playerInCheckmate}, Gagnant: ${winner}`);
+                        }
+                        
+                        io.to(game.id).emit('gameOver', { winner, reason });
+                        if (game.timer) {
+                          clearInterval(game.timer);
+                          game.timer = null;
+                        }
                       }
                     }
-                  }
+                  }, reflectionTime);
                 }
               } catch (error) {
                 console.error('❌ Erreur bot:', error);
