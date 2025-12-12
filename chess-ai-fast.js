@@ -176,18 +176,164 @@ function getBestMove(fen) {
 }
 
 // Analyser une partie terminée pour apprendre
-function analyzeGame(gameHistory, winner) {
-  if (gameHistory.length < 4) return;
+function analyzeGame(gameHistory, winner, botColor = 'black') {
+  if (gameHistory.length < 6) return; // Au moins 3 coups de chaque côté
   
-  // Si le bot a perdu, apprendre des derniers coups
-  if (winner !== 'bot') {
-    const lastBotMoves = gameHistory.filter((_, index) => index % 2 === 1).slice(-3);
-    lastBotMoves.forEach(move => {
-      // Simuler la position pour obtenir le FEN (simplifié)
-      console.log(`🤔 Analyser coup potentiellement mauvais: ${move}`);
-      // TODO: Implémenter l'analyse complète
+  console.log(`📊 Analyse de partie - Gagnant: ${winner}, Bot jouait: ${botColor}`);
+  
+  try {
+    // Reconstruire la partie pour analyser les positions
+    const chess = new Chess();
+    const positions = [chess.fen()]; // Position initiale
+    
+    // Rejouer tous les coups pour obtenir les positions
+    gameHistory.forEach((move, index) => {
+      try {
+        chess.move(move);
+        positions.push(chess.fen());
+      } catch (error) {
+        console.log(`⚠️ Coup invalide lors de l'analyse: ${move} à l'index ${index}`);
+        return;
+      }
     });
+    
+    // Déterminer si le bot a gagné, perdu ou fait match nul
+    const botWon = (winner === botColor) || (winner === 'bot');
+    const botLost = winner !== 'draw' && !botWon;
+    
+    if (botLost) {
+      console.log(`😔 Bot a perdu - Analyse des erreurs`);
+      
+      // Analyser les 4 derniers coups du bot pour identifier les erreurs
+      const botMoveIndices = [];
+      gameHistory.forEach((move, index) => {
+        const isBotMove = (botColor === 'white' && index % 2 === 0) || 
+                         (botColor === 'black' && index % 2 === 1);
+        if (isBotMove) {
+          botMoveIndices.push(index);
+        }
+      });
+      
+      // Prendre les 4 derniers coups du bot
+      const lastBotMoves = botMoveIndices.slice(-4);
+      
+      lastBotMoves.forEach(moveIndex => {
+        const move = gameHistory[moveIndex];
+        const positionBefore = positions[moveIndex];
+        const positionAfter = positions[moveIndex + 1];
+        
+        if (positionBefore && positionAfter) {
+          // Analyser si ce coup était une erreur
+          const wasBlunder = analyzeMove(positionBefore, move, positionAfter);
+          
+          if (wasBlunder) {
+            console.log(`💥 Coup identifié comme erreur: ${move} (position ${moveIndex + 1})`);
+            learnBadMove(positionBefore, move);
+          }
+        }
+      });
+      
+    } else if (botWon) {
+      console.log(`🎉 Bot a gagné - Renforcement des bons coups`);
+      
+      // Renforcer les coups qui ont mené à la victoire
+      const botMoveIndices = [];
+      gameHistory.forEach((move, index) => {
+        const isBotMove = (botColor === 'white' && index % 2 === 0) || 
+                         (botColor === 'black' && index % 2 === 1);
+        if (isBotMove) {
+          botMoveIndices.push(index);
+        }
+      });
+      
+      // Prendre les 3 derniers coups du bot (ceux qui ont mené à la victoire)
+      const winningMoves = botMoveIndices.slice(-3);
+      
+      winningMoves.forEach(moveIndex => {
+        const move = gameHistory[moveIndex];
+        const positionBefore = positions[moveIndex];
+        
+        if (positionBefore) {
+          console.log(`✨ Renforcement du bon coup: ${move}`);
+          learnGoodMove(positionBefore, move);
+        }
+      });
+    }
+    
+    // Statistiques d'apprentissage
+    console.log(`🧠 Apprentissage - Mauvais coups mémorisés: ${badMoves.size}, Bons coups: ${goodMoves.size}`);
+    
+  } catch (error) {
+    console.error(`❌ Erreur lors de l'analyse de partie:`, error);
   }
+}
+
+// Analyser si un coup spécifique était une erreur
+function analyzeMove(fenBefore, move, fenAfter) {
+  try {
+    const chessBefore = new Chess(fenBefore);
+    const chessAfter = new Chess(fenAfter);
+    
+    // Vérifier si le coup a mis le roi en danger
+    if (chessAfter.inCheck()) {
+      console.log(`⚠️ Coup ${move} a mis le roi en échec`);
+      return true; // Probablement une erreur si on se met en échec
+    }
+    
+    // Vérifier si le coup a perdu du matériel sans compensation
+    const materialBefore = calculateMaterialValue(chessBefore);
+    const materialAfter = calculateMaterialValue(chessAfter);
+    
+    const currentPlayer = chessBefore.turn();
+    const materialLoss = currentPlayer === 'w' ? 
+      materialBefore.white - materialAfter.white : 
+      materialBefore.black - materialAfter.black;
+    
+    if (materialLoss > 200) { // Perte significative de matériel
+      console.log(`💰 Coup ${move} a perdu ${materialLoss} points de matériel`);
+      return true;
+    }
+    
+    // Vérifier si le coup permet à l'adversaire de faire une grosse capture au prochain tour
+    const opponentMoves = chessAfter.moves({ verbose: true });
+    const dangerousCaptures = opponentMoves.filter(oppMove => 
+      oppMove.captured && PIECE_VALUES[oppMove.captured] >= 300
+    );
+    
+    if (dangerousCaptures.length > 0) {
+      console.log(`🎯 Coup ${move} permet une capture dangereuse: ${dangerousCaptures[0].san}`);
+      return true;
+    }
+    
+    return false; // Le coup semble correct
+    
+  } catch (error) {
+    console.log(`⚠️ Erreur analyse du coup ${move}:`, error.message);
+    return false;
+  }
+}
+
+// Calculer la valeur matérielle totale pour chaque camp
+function calculateMaterialValue(chess) {
+  let whiteValue = 0;
+  let blackValue = 0;
+  
+  const board = chess.board();
+  
+  board.forEach(row => {
+    row.forEach(square => {
+      if (square) {
+        const pieceValue = PIECE_VALUES[square.type] || 0;
+        if (square.color === 'w') {
+          whiteValue += pieceValue;
+        } else {
+          blackValue += pieceValue;
+        }
+      }
+    });
+  });
+  
+  return { white: whiteValue, black: blackValue };
 }
 
 // Fonction améliorée qui analyse le type de coup pour le temps de réflexion
@@ -325,4 +471,4 @@ function getBestMoveWithAnalysis(fen) {
   return { move: randomMove, moveType: 'positional' };
 }
 
-module.exports = { getBestMove, getBestMoveWithAnalysis, learnBadMove, learnGoodMove, analyzeGame };
+module.exports = { getBestMove, getBestMoveWithAnalysis, learnBadMove, learnGoodMove, analyzeGame, analyzeMove, calculateMaterialValue };

@@ -5,7 +5,32 @@ const { Chess } = require('chess.js');
 const { randomUUID } = require('crypto');
 // Base de données temporairement désactivée pour focus sur timer
 // const { createGame, getGameById, updateGame, getUserActiveGames } = require('./lib-server.js');
-const { getBestMove, getBestMoveWithAnalysis } = require('./chess-ai-fast.js');
+const { getBestMove, getBestMoveWithAnalysis, analyzeGame } = require('./chess-ai-fast.js');
+
+// Fonction pour analyser une partie terminée contre le bot
+function analyzeFinishedGame(game, winner) {
+  if (!game.isAgainstBot) return; // Seulement pour les parties contre le bot
+  
+  const gameHistory = game.chess.history();
+  if (gameHistory.length < 6) return; // Partie trop courte pour analyser
+  
+  // Déterminer qui a gagné du point de vue du bot
+  let botResult;
+  if (winner === 'draw') {
+    botResult = 'draw';
+  } else if (winner === game.botColor) {
+    botResult = 'bot'; // Le bot a gagné
+  } else {
+    botResult = 'human'; // L'humain a gagné
+  }
+  
+  console.log(`🔍 Déclenchement de l'analyse de partie - Résultat: ${botResult}`);
+  
+  // Analyser la partie pour que le bot apprenne
+  setTimeout(() => {
+    analyzeGame(gameHistory, botResult, game.botColor);
+  }, 1000); // Délai pour ne pas bloquer la réponse
+}
 
 // Fonction pour calculer le temps de réflexion selon le type de coup
 function calculateReflectionTime(moveData) {
@@ -83,6 +108,9 @@ function startGameTimer(game, io) {
       io.to(game.id).emit('gameOver', { winner: 'black', reason: 'timeout' });
       clearInterval(timer);
       game.timer = null;
+      
+      // Analyser la partie pour l'apprentissage du bot
+      analyzeFinishedGame(game, 'black');
       return;
     }
     
@@ -94,6 +122,9 @@ function startGameTimer(game, io) {
       io.to(game.id).emit('gameOver', { winner: 'white', reason: 'timeout' });
       clearInterval(timer);
       game.timer = null;
+      
+      // Analyser la partie pour l'apprentissage du bot
+      analyzeFinishedGame(game, 'white');
       return;
     }
     
@@ -302,6 +333,9 @@ app.prepare().then(() => {
               clearInterval(game.timer);
               game.timer = null;
             }
+            
+            // Analyser la partie pour l'apprentissage du bot
+            analyzeFinishedGame(game, winner);
             return;
           }
           
@@ -354,6 +388,9 @@ app.prepare().then(() => {
                           clearInterval(game.timer);
                           game.timer = null;
                         }
+                        
+                        // Analyser la partie pour l'apprentissage du bot
+                        analyzeFinishedGame(game, winner);
                       }
                     }
                   }, reflectionTime);
@@ -418,6 +455,9 @@ app.prepare().then(() => {
         clearInterval(game.timer);
         game.timer = null;
       }
+      
+      // Analyser la partie pour l'apprentissage du bot
+      analyzeFinishedGame(game, winner);
     });
 
     socket.on('leaveGame', (data) => {
