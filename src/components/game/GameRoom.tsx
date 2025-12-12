@@ -5,7 +5,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useDialog } from '@/hooks/useDialog';
 import ChessBoard from '../chess/ChessBoard';
 import Dialog from '../ui/Dialog';
-import ChessPiece from '../chess/ChessPiece';
 
 export default function GameRoom() {
   const { gameState, makeMove, offerDraw, resign, drawOffer, acceptDraw, declineDraw, friendlyGameOffer, offerFriendlyGame, acceptFriendlyGame, declineFriendlyGame } = useSocket();
@@ -409,7 +408,7 @@ export default function GameRoom() {
                                 }}
                               >
                                 {(() => {
-                                  const pieces = {
+                                  const pieces: { [key: string]: string } = {
                                     'K': '♔', 'Q': '♕', 'R': '♖', 'B': '♗', 'N': '♘', 'P': '♙',
                                     'k': '♚', 'q': '♛', 'r': '♜', 'b': '♝', 'n': '♞', 'p': '♟'
                                   };
